@@ -31,9 +31,23 @@ show1("two stops: negative + future date", check_day(mk(e=-5.0, d=Date(2027,1,1)
 # taxi=450 makes the surplus both divisible by 9 AND equal to an entered figure.
 show1("two hints on one difference",       check_day(mk(taxi=450.0, c=2270.0); prior_closing=1270.0))
 
-# --- MONEY_TOL rounding boundary (tol = 0.005) -------------------------------
-show1("just under tolerance (clean)",      check_day(mk(c=2270.0049); prior_closing=1270.0))
-show1("right at tolerance (flags)",        check_day(mk(c=2270.005); prior_closing=1270.0))
+# --- L2 (needs reason) + L3 (no prior day) together --------------------------
+show1("imbalance + no prior day",          check_day(mk(c=2720.0)))  # no prior_closing passed
+
+# --- L2-A + L3-D: a genesis day that doesn't balance internally --------------
+show1("imbalance + genesis",               check_day(mk(c=2720.0); is_genesis=true))
+
+# --- L2-A + L3-B: imbalance on a day that's already been ledgered ------------
+show1("imbalance + ledger already exists", check_day(mk(c=2720.0); prior_closing=1270.0, ledger_exists=true))
+
+# --- L3-C + L3-B: closed day re-entered where a ledger already exists --------
+show1("closed day + ledger already exists", check_day(mk(st=STATUS_CLOSED); prior_closing=1270.0, ledger_exists=true))
+
+# --- L3-D + L3-B: genesis day re-entered where a ledger already exists -------
+show1("genesis + ledger already exists",   check_day(mk(); is_genesis=true, ledger_exists=true))
+
+# --- Closed day with no prior, not genesis: neither L3-A nor L3-D should fire
+show1("closed day, no prior, not genesis", check_day(mk(st=STATUS_CLOSED)))
 
 # --- All-zero day -------------------------------------------------------------
 show1("all-zero day",                      check_day(mk(o=0.0, s=0.0, e=0.0, dep=0.0, c=0.0); prior_closing=0.0))

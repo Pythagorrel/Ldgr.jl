@@ -13,4 +13,4 @@ show1(t,fs)=(println("\n--- $t"); for f in fs; println("  [$(f.code)] $(f.messag
 show1("diff equals an entered figure", check_day(mk(e=22000.0,taxi=400.0,c=1870.0); prior_closing=1270.0))
 # decimal slip: deposit 7500 instead of 75000
 show1("decimal slip on deposit", check_day(mk(dep=7500.0,c=2270.0); prior_closing=1270.0))
-show1("formatting", check_day(mk(dep=200000.0)))
+show1("bad format: extra decimal places", check_day(mk(e=22400.505); prior_closing=1270.0))

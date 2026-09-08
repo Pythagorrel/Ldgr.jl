@@ -308,6 +308,18 @@ function _retry_pending!(session, y::Integer, m::Integer, force::Bool, echo::Boo
             new_dv = is_closed(prec) ? 0.0 : Checks.day_residual(prec)
             new_ov = is_closed(prec) ? 0.0 : Checks.overnight_variance(prec, prior === nothing ? nothing : prior.closing)
 
+            # --- Reason gate on the recomputed figures -------------------------------
+            # The overnight variance was unknowable at first entry, so L2-B could not
+            # have required a reason then. If it turns out non-zero now that the real
+            # prior is known, the same rule still applies — posting it silently would
+            # let a genuine discrepancy through the one gate meant to catch it.
+            recheck = Checks.balance_checks(prec, prior === nothing ? nothing : prior.closing)
+            if Checks.needs_reason(recheck) && isempty(strip(prec.reason))
+                msgs = join(["[$(f.code)] $(f.message)" for f in recheck if f.level == Checks.LEVEL_EXPLAIN], "\n  ")
+                log_event(session, "HELD $pend — recomputed figures now need a reason:\n  $msgs\n  Re-enter this day with --force and a reason to release it."; echo=echo)
+                continue
+            end
+
             if abs(new_ov - amounts[:overnight_variance]) >= 0.005 ||
                abs(new_dv - amounts[:day_variance]) >= 0.005
                 # Update the journal row so the source of truth carries the
