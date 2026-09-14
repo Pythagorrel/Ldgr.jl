@@ -65,64 +65,56 @@ function banner(where, kind, text, actionLabel, actionFn) {
    Building the form from the server's category list
 --------------------------------------------------------------------------- */
 function buildGroups() {
-  const host = $("groups");
-  host.innerHTML = "";
+  const activityHost = $("groups-activity");
+  const openingHost  = $("slot-opening");
+  const closingHost  = $("slot-closing");
+
+  activityHost.innerHTML = "";
+  openingHost.innerHTML  = "";
+  closingHost.innerHTML  = "";
 
   state.config.groups.forEach(group => {
-    // v4.0: tag the cash-book card so its inputs are visually distinct. These
-    // are the two figures that come from counting the drawer rather than from
-    // arithmetic, and the whole check depends on the operator knowing that.
-    const card = document.createElement("div");
-    card.className = "card";
-    card.dataset.group = group.id;
-
-    const h = document.createElement("h3");
-    h.textContent = group.title;
-    const hint = document.createElement("p");
-    hint.className = "hint";
-    hint.textContent = group.hint;
-
-    const grid = document.createElement("div");
-    grid.className = "grid";
+    const isCashbook = group.id === "cashbook";
 
     group.categories.forEach(cat => {
-      const field = document.createElement("div");
-      field.className = "field";
+      const fieldEl = createFieldDOM(cat);
 
-      const label = document.createElement("label");
-      label.setAttribute("for", "in-" + cat.key);
-      label.textContent = cat.label;
-
-      const wrap = document.createElement("div");
-      wrap.className = "money";
-      const sym = document.createElement("span");
-      sym.className = "sym";
-      sym.textContent = "$";
-      const input = document.createElement("input");
-      input.type = "text";
-      input.id = "in-" + cat.key;
-      input.dataset.key = cat.key;
-      input.dataset.label = cat.label;
-      input.placeholder = "0.00";
-      input.inputMode = "decimal";
-      input.autocomplete = "off";
-      wrap.append(sym, input);
-
-      const err = document.createElement("div");
-      err.className = "err";
-      err.id = "err-" + cat.key;
-
-      field.append(label, wrap, err);
-      grid.appendChild(field);
-
-      // Live feedback: validate as the user types, not only on submit.
-      input.addEventListener("input", () => { validateAmount(input); refreshTotals(); scheduleCheck(); });
-      input.addEventListener("blur",  () => { tidyAmount(input); refreshTotals(); scheduleCheck(); });
+      if (cat.key === state.config.openingKey) {
+        openingHost.appendChild(fieldEl);
+      } else if (cat.key === state.config.closingKey) {
+        closingHost.appendChild(fieldEl);
+      } else {
+        // Render inside standard group cards
+        let card = activityHost.querySelector(`[data-group="${group.id}"]`);
+        if (!card) {
+          card = document.createElement("div");
+          card.className = `card group-card group-${group.id}`;
+          card.dataset.group = group.id;
+          card.innerHTML = `<h3>${group.title}</h3><p class="hint">${group.hint}</p><div class="grid"></div>`;
+          activityHost.appendChild(card);
+        }
+        card.querySelector(".grid").appendChild(fieldEl);
+      }
     });
-
-    card.append(h, hint, grid);
-    host.appendChild(card);
   });
+}
+
+function createFieldDOM(cat) {
+  const field = document.createElement("div");
+  field.className = "field";
+  field.innerHTML = `
+    <label for="in-${cat.key}">${cat.label}</label>
+    <div class="money">
+      <span class="sym">$</span>
+      <input type="text" id="in-${cat.key}" data-key="${cat.key}" data-label="${cat.label}" 
+             placeholder="0.00" inputmode="decimal" autocomplete="off">
+    </div>
+    <div class="err" id="err-${cat.key}"></div>
+  `;
+  const input = field.querySelector("input");
+  input.addEventListener("input", () => { validateAmount(input); refreshTotals(); scheduleCheck(); });
+  input.addEventListener("blur",  () => { tidyAmount(input); refreshTotals(); scheduleCheck(); });
+  return field;
 }
 
 /* ---------------------------------------------------------------------------
@@ -202,7 +194,7 @@ function formValid() {
   // so the button greys out rather than the save failing (Warnings Guide §8).
   if (!$("reason-box").hidden && $("txt-reason").value.trim() === "") return false;
   const dateOk = $("err-date").textContent === "";
-  const amountsOk = !document.querySelector("#groups input.invalid");
+  const amountsOk = !document.querySelector("#slot-opening input.invalid, #groups-activity input.invalid, #slot-closing input.invalid");
   return dateOk && currentDate() !== null && amountsOk;
 }
 
@@ -261,7 +253,7 @@ function prettyDate(iso) {
 --------------------------------------------------------------------------- */
 function readAmounts() {
   const out = {};
-  document.querySelectorAll("#groups input").forEach(i => {
+  document.querySelectorAll("#slot-opening input, #groups-activity input, #slot-closing input").forEach(i => {
     const raw = i.value.trim();
     // CHANGED IN v4.0. Blank still means zero for every posted category — no
     // taxi fares today, so nothing was spent. It does NOT mean zero for the two
@@ -284,7 +276,7 @@ function isCashBook(key) {
 }
 
 function writeAmounts(amounts) {
-  document.querySelectorAll("#groups input").forEach(i => {
+  document.querySelectorAll("#slot-opening input, #groups-activity input, #slot-closing input").forEach(i => {
     const v = amounts ? amounts[i.dataset.key] : 0;
     i.value = v ? Number(v).toFixed(2) : "";
     i.classList.remove("invalid", "filled");
@@ -317,20 +309,48 @@ function refreshTotals() {
    (Handover §4 rule 5).
 --------------------------------------------------------------------------- */
 function renderFindings(findings) {
-  const host = $("findings");
-  host.innerHTML = "";
-  (findings || []).forEach(f => {
-    const el = document.createElement("div");
-    el.className = "finding lv" + f.level;
-    el.innerHTML = '<span class="code"></span><span class="msg"></span>';
-    el.querySelector(".code").textContent = f.code;
-    el.querySelector(".msg").textContent  = f.message;
-    host.appendChild(el);
+  findings = findings || [];
+
+  // --- Right-side rail: one compact card per finding, always in sync with
+  //     the server's current list. Nothing to dismiss — a card disappears
+  //     on its own once that finding no longer applies. ---
+  const rail = $("findings-rail");
+  rail.innerHTML = "";
+  findings.forEach(f => {
+    const card = document.createElement("div");
+    card.className = "finding-card lv" + f.level;
+    card.innerHTML =
+      '<div class="title"><span class="code"></span><span class="lvname"></span></div>' +
+      '<div class="msg"></div>';
+    card.querySelector(".code").textContent   = f.code;
+    card.querySelector(".lvname").textContent = f.levelName || "";
+    card.querySelector(".msg").textContent    = f.message;
+    rail.appendChild(card);
   });
+  rail.hidden = findings.length === 0;
+
+  // --- Persistent sticky banner: one summary line, colored by the worst
+  //     level currently present. Stays until the list is actually empty —
+  //     it does not have its own dismiss. ---
+  const sticky = $("findings-sticky");
+  if (findings.length === 0) {
+    sticky.hidden = true;
+    sticky.className = "findings-sticky";
+  } else {
+    const worst = Math.min(...findings.map(f => f.level));
+    const label = { 1: "must be fixed before saving", 2: "needs a reason before saving",
+                    3: "for your attention", 4: "worth a second look" }[worst] || "";
+    sticky.className = "findings-sticky sev" + worst;
+    sticky.innerHTML = '<span class="count"></span><span class="text"></span>';
+    sticky.querySelector(".count").textContent =
+      findings.length + (findings.length === 1 ? " issue" : " issues");
+    sticky.querySelector(".text").textContent = label;
+    sticky.hidden = false;
+  }
 
   // A Level 2 cannot be saved without a typed reason. The box appears only when
   // it is needed, so it never reads as routine paperwork.
-  const needs = (findings || []).some(f => f.level === 2);
+  const needs = findings.some(f => f.level === 2);
   $("reason-box").hidden = !needs;
   if (!needs) $("txt-reason").value = "";
   updateButtons();
@@ -456,7 +476,7 @@ async function onNextDay() {
   writeAmounts(null);
   validateDate();
   window.scrollTo({ top: 0, behavior: "smooth" });
-  document.querySelector("#groups input").focus();
+  document.querySelector("#slot-opening input, #groups-activity input, #slot-closing input").focus();
 }
 
 async function onReview() {
@@ -700,14 +720,21 @@ async function loadStaged() {
    fields on screen would invite somebody to fill them in. */
 function applyClosedState() {
   const closed = $("chk-closed").checked;
-  $("groups").style.display     = closed ? "none" : "";
-  $("predicted").hidden         = closed;
-  $("reason-box").hidden        = closed || $("reason-box").hidden;
-  $("closed-note").textContent  = closed
+  
+  // Hide activity cards and closing drawer container when marked closed
+  $("groups-activity").style.display = closed ? "none" : "";
+  $("slot-closing-container").style.display = closed ? "none" : "";
+  $("slot-opening").style.display = closed ? "none" : "";
+  
+  $("predicted").hidden = closed;
+  $("reason-box").hidden = closed || $("reason-box").hidden;
+  $("closed-note").textContent = closed
     ? "No ledger will be generated. The next working day carries this balance through."
     : "";
+    
   if (closed) renderFindings([]);
   else scheduleCheck();
+  
   updateButtons();
 }
 
