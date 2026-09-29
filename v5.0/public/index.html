@@ -1,0 +1,173 @@
+<!doctype html>
+<!--
+  index.html — the shell.
+
+  Note what is NOT in this file: no category names, no account names, no
+  accounting rules of any kind. The category sub-cards and their fields are
+  built at runtime from whatever /api/config reports, which is generated from
+  Config.jl. Add a category there and it appears here on the next reload,
+  with no edit to this file.
+
+  This page's entire job is to produce one day's figures and hand them to the
+  server. It has no idea what a ledger is.
+
+  Every id and class below is part of the UI contract shared with app.js
+  (handoff/ui-contract.md). Rename nothing without changing both sides.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Daily Entry — ldgr</title>
+  <!-- Nothing is fetched from the internet: ldgr runs entirely on the clinic's
+       own machine. The page uses the fonts already installed (see --sans and
+       --mono in styles.css). -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        <path d="M6 3h8l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/>
+        <path d="M14 3v5h5"/><path d="M8.5 13h7"/><path d="M8.5 17h4.5"/>
+      </svg>
+    </span>
+    <div class="brand-text">
+      <h1>Daily Entry</h1>
+      <p class="brand-sub">Enter each day, check it, then save it to the books</p>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+
+  <!-- ================= ENTRY ================= -->
+  <section id="view-entry">
+    <div id="banner-area"></div>
+
+    <div class="entry-grid">
+      <div class="entry-main">
+
+        <!-- 1 · Start of day: the date, work day or off day, the counted opening balance,
+             and a reason when it doesn't match the last close -->
+        <section class="card stage" id="card-morning">
+          <div class="stage-head">
+            <span class="stage-chip">1</span>
+            <h2>Start of day</h2>
+            <div class="daytype">
+              <!-- Visually hidden but still focusable: the label below is what people see. -->
+              <input type="checkbox" id="chk-closed" class="daytype-input">
+              <label for="chk-closed" class="daytype-toggle">
+                <span class="opt opt-trading" aria-hidden="true">Work day</span>
+                <span class="opt opt-closed">Off day</span>
+              </label>
+            </div>
+          </div>
+          <div class="date-row">
+            <div class="field"><label for="sel-month">Month</label><select id="sel-month"></select></div>
+            <div class="field"><label for="sel-day">Day</label><select id="sel-day"></select></div>
+            <div class="field"><label for="sel-year">Year</label><select id="sel-year"></select></div>
+          </div>
+          <div class="err" id="err-date"></div>
+          <p class="closed-note" id="closed-note"></p>
+          <div id="slot-opening" class="hide-when-closed"></div>
+          <p id="prior-hint" class="hintline hide-when-closed" hidden></p>
+          <div id="opening-reason-box" class="reasonbox hide-when-closed" hidden>
+            <!-- app.js replaces the bold words with the short title of the warning that needs the reason. -->
+            <label for="txt-opening-reason"><b id="opening-reason-lead">Opening doesn't match last close.</b> Say briefly why before saving.</label>
+            <input type="text" id="txt-opening-reason" maxlength="200">
+          </div>
+        </section>
+
+        <!-- 2 · The day's takings, expenses and banking: one sub-card per config group -->
+        <section class="card stage hide-when-closed" id="card-figures">
+          <div class="stage-head"><span class="stage-chip">2</span><h2>Today's numbers</h2></div>
+          <p class="hint">(Leave anything that didn't happen blank)</p>
+          <div id="groups-activity"></div>
+        </section>
+
+        <!-- 3 · End of day: the counted closing balance, and a reason when the day doesn't balance -->
+        <section class="card stage hide-when-closed" id="card-evening">
+          <div class="stage-head"><span class="stage-chip">3</span><h2>End of day</h2></div>
+          <div id="slot-closing"></div>
+          <p id="predicted" class="hintline" hidden></p>
+          <div id="reason-box" class="reasonbox" hidden>
+            <!-- app.js replaces the bold words with the short title of the warning that needs the reason. -->
+            <label for="txt-reason"><b id="reason-lead">This day doesn't balance.</b> Say briefly why before saving.</label>
+            <input type="text" id="txt-reason" maxlength="200">
+          </div>
+        </section>
+
+        <!-- Dock: the full explanation of one warning (opened from "See full explanation"
+             in the Checks panel), the tick boxes a save sometimes needs, running totals,
+             and the actions. It is the last thing in the form, after End of day, and
+             scrolls with the page, so it never covers a box while figures are typed.
+
+             The two actions are separate: Save writes the day to the books and stays
+             on it, and Next day moves to the day after. Next day never saves; the
+             server refuses to move on from a day whose figures are not in the books. -->
+        <div id="dock" class="dock">
+          <div id="dock-note" class="dock-note" tabindex="-1" hidden></div>
+          <!-- Each tick box shows only when it applies to the date on screen, which the
+               server says with every check. Saving writes the day straight to the books. -->
+          <label class="checkline" id="genesis-line" hidden>
+            <input type="checkbox" id="chk-genesis">
+            <span>This is the <b>first day on record</b>. Accept its opening balance as the starting point.</span>
+          </label>
+          <label class="checkline" id="force-line" hidden>
+            <input type="checkbox" id="chk-force">
+            <span>Replace the ledger file already made for this day.
+              <span class="muted">(Leave unticked to keep the old file.)</span></span>
+          </label>
+          <div class="dock-main">
+            <button id="dock-status" class="dock-status" type="button"
+                    aria-controls="checks" aria-expanded="false" hidden></button>
+            <dl class="totals">
+              <div><dt>Takings</dt><dd id="tot-cash">$0.00</dd></div>
+              <div><dt>Expenses</dt><dd id="tot-exp">$0.00</dd></div>
+              <div><dt>Banked</dt><dd id="tot-dep">$0.00</dd></div>
+            </dl>
+            <div class="dock-actions">
+              <button class="btn-quiet"   id="btn-clear"       type="button">Clear</button>
+              <button class="btn-ghost"   id="btn-cancel-edit" type="button" hidden>Cancel edit</button>
+              <button class="btn-primary" id="btn-save"        type="button">Save</button>
+              <button class="btn-ghost"   id="btn-next"        type="button">Next day</button>
+            </div>
+          </div>
+          <!-- What the server answered about Next day, under the button that
+               asked. The banner at the top of the page is off screen when
+               somebody is down here at the buttons, so that answer was being
+               missed. It is the last thing in the dock, in the page flow like
+               everything else here, so it covers nothing. -->
+          <p id="dock-msg" class="dock-msg" role="status" hidden></p>
+        </div>
+      </div>
+
+      <!-- Checks: a short phrase per warning from the server. Its own grid column on
+           wide screens, so it can never cover the form; on narrow ones it opens just below the dock. -->
+      <aside id="checks" class="checks" aria-labelledby="checks-heading">
+        <div class="checks-head">
+          <h2 id="checks-heading">Checks</h2>
+          <span id="checks-count" class="checks-count" hidden></span>
+        </div>
+        <p id="checks-empty" class="checks-empty">Nothing to fix so far</p>
+        <ul id="checks-list" class="checks-list"></ul>
+        <p id="checks-live" class="sr-only" aria-live="polite"></p>
+      </aside>
+    </div>
+  </section>
+
+  <footer class="watermark">
+    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4"
+         stroke-linecap="round" aria-hidden="true" focusable="false">
+      <circle cx="8" cy="8" r="2.9"/>
+      <path d="M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M3.2 12.8l1.1-1.1M11.7 4.3l1.1-1.1"/>
+    </svg>
+    <span>Powered by <b>SolRegia</b></span>
+  </footer>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,1153 @@
+/* =========================================================================
+   styles.css — presentation only.
+
+   No logic lives here. Every class and id styled below is part of the UI
+   contract shared with app.js (handoff/ui-contract.md); rename nothing
+   without changing both sides.
+
+   THE LOOK, STATED PLAINLY: solid white cards in the order the day happens
+   (start of day, today's numbers, end of day, then the dock with the totals
+   and buttons), one green button per screen, and colour kept for the
+   warnings. Nothing floats over the form. Glass is used only for the banners
+   and the Checks panel.
+
+   PALETTE RULE: the thirteen colours at the top of :root are fixed. Anything
+   else in this file is a translucent or darker version of one of them, plus
+   the warm "counted figure" tint the drawer counts have always had.
+   ========================================================================= */
+
+:root {
+  /* ---- palette (exact values; do not change) ---- */
+  --ink:        #1C2521;
+  --ink-soft:   #5B6660;
+  --accent:     #1F6F5C;
+  --accent-dk:  #175649;
+  --band:       #E8F3EE;
+  --line:       #E3E0D8;
+  --line-soft:  #EFEDE7;
+  --page:       #FAF9F6;
+  --card:       #FFFFFF;
+  --danger:     #A63D40;
+  --danger-bg:  #FBEDE9;
+  --warn:       #8A6212;
+  --warn-bg:    #FDF4E3;
+
+  /* ---- derived: darker or translucent versions of the palette only ---- */
+  --line-strong: #D6D2C8;                 /* darker --line: input borders */
+  --line-hover:  #C8C3B7;                 /* darker still: hovered or filled inputs */
+  --counted-bg:  #FFFDF5;                 /* drawer counts: a counted figure, not a calculated one */
+  --counted-line:#D9C89A;
+  --hover-ink:   rgba(28, 37, 33, .05);   /* translucent --ink for quiet hovers */
+  --ring:        rgba(31, 111, 92, .20);  /* translucent --accent focus halo */
+
+  --glass:        rgba(255, 255, 255, .72);
+  --glass-line:   rgba(227, 224, 216, .90);
+  --blur:         blur(14px) saturate(140%);
+
+  --shadow-card:  0 1px 2px rgba(28, 37, 33, .04), 0 8px 24px -12px rgba(28, 37, 33, .10);
+
+  /* ---- type ----
+     Installed fonts only; nothing is downloaded, because ldgr runs entirely on
+     the clinic's own machine. On Windows that means Segoe UI for text and
+     Consolas for figures. Inter and JetBrains Mono are used instead only if
+     they happen to be installed. */
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, Menlo, monospace;
+
+  /* ---- layout ---- */
+  --page-max:   1180px;
+  --gutter:     24px;
+  --dock-pad:   10px;
+  --dock-row:   44px;   /* minimum height of the dock's main row */
+
+  /* ---- warning level defaults (the .lvN classes below override these) ---- */
+  --lv:      var(--ink-soft);
+  --lv-bg:   var(--line-soft);
+  --lv-line: rgba(91, 102, 96, .22);
+  --lv-icon: var(--i-info);
+
+  /* ---- icons, drawn in CSS only; used as masks so they take the level colour ----
+     Every shape differs as well as its colour, so the four levels can be told
+     apart without colour (Warnings Guide §8). */
+  --i-stop: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M9.1 2H14.9Q15.9 2 16.607 2.707L21.293 7.393Q22 8.1 22 9.1V14.9Q22 15.9 21.293 16.607L16.607 21.293Q15.9 22 14.9 22H9.1Q8.1 22 7.393 21.293L2.707 16.607Q2 15.9 2 14.9V9.1Q2 8.1 2.707 7.393L7.393 2.707Q8.1 2 9.1 2ZM12 6.3A1.15 1.15 0 0 1 13.15 7.45V13.05A1.15 1.15 0 0 1 10.85 13.05V7.45A1.15 1.15 0 0 1 12 6.3ZM12 15.55A1.35 1.35 0 1 1 12 18.25A1.35 1.35 0 1 1 12 15.55Z'/%3E%3C/svg%3E");
+  --i-warn: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M11.309 3.718Q12 2.5 12.691 3.718L21.809 19.782Q22.5 21 21.1 21H2.9Q1.5 21 2.191 19.782ZM12 8.2A1.1 1.1 0 0 1 13.1 9.3V13.9A1.1 1.1 0 0 1 10.9 13.9V9.3A1.1 1.1 0 0 1 12 8.2ZM12 15.9A1.3 1.3 0 1 1 12 18.5A1.3 1.3 0 1 1 12 15.9Z'/%3E%3C/svg%3E");
+  --i-info: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12 2A10 10 0 1 1 12 22A10 10 0 1 1 12 2ZM12 6.2A1.3 1.3 0 1 1 12 8.8A1.3 1.3 0 1 1 12 6.2ZM12 10.2A1.1 1.1 0 0 1 13.1 11.3V16.7A1.1 1.1 0 0 1 10.9 16.7V11.3A1.1 1.1 0 0 1 12 10.2Z'/%3E%3C/svg%3E");
+  --i-tip:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 15.6c0-1.4-.6-2.2-1.5-3.1A6 6 0 1 1 16.5 12.5c-.9.9-1.5 1.7-1.5 3.1M9.5 18.6h5M10.5 21.4h3'/%3E%3C/svg%3E");
+  --i-chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 14.5l5-5 5 5'/%3E%3C/svg%3E");
+  /* These two carry their own palette colours, so they are backgrounds, not masks. */
+  --i-ok:   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='11' fill='%23E8F3EE'/%3E%3Cpath d='M7.5 12.4l3 3 6-6.3' fill='none' stroke='%231F6F5C' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --i-select: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B6660' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3C/svg%3E");
+}
+
+/* =========================================================================
+   Base
+   ========================================================================= */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--page);
+  color: var(--ink);
+  font: 400 14px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* A very faint, fixed green-and-cream wash. Barely visible on its own; it is
+   what gives the glass panels something to blur. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1100px 700px at 8% -12%, rgba(232, 243, 238, .95), rgba(232, 243, 238, 0) 62%),
+    radial-gradient(900px 640px at 104% 108%, rgba(232, 243, 238, .80), rgba(232, 243, 238, 0) 60%),
+    radial-gradient(760px 520px at 70% 38%, rgba(253, 244, 227, .55), rgba(253, 244, 227, 0) 70%);
+}
+
+h1, h2, h3, h4, p { margin: 0; }
+b, strong { font-weight: 600; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* ---- contract globals ---- */
+[hidden] { display: none !important; }   /* author display rules would otherwise beat the attribute */
+
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+#view-entry.is-closed .hide-when-closed { display: none; }
+/* app.js rewrites #prior-hint's whole class list ("hintline" / "hintline off"),
+   which drops hide-when-closed, so it is also hidden by id. */
+#view-entry.is-closed #prior-hint { display: none; }
+
+.muted { color: var(--ink-soft); font-size: 13px; }
+
+/* ---- focus: always visible for keyboard users ---- */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* =========================================================================
+   Header
+   ========================================================================= */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+  /* Full-width hairline, content lined up with .page */
+  padding-block: 18px;
+  padding-inline: max(var(--gutter), calc((100% - var(--page-max)) / 2 + var(--gutter)));
+  border-bottom: 1px solid var(--line);
+}
+
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+.brand-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px; height: 38px;
+  border-radius: 11px;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(23, 86, 73, .30), inset 0 0 0 1px rgba(255, 255, 255, .06);
+}
+.brand-mark svg { display: block; width: 20px; height: 20px; }
+
+.brand-text { min-width: 0; }
+.brand h1 {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -.012em;
+}
+.brand-sub { margin-top: 1px; font-size: 13px; line-height: 1.4; color: var(--ink-soft); }
+
+/* =========================================================================
+   Page layout
+   ========================================================================= */
+.page {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding-top: 24px;
+  padding-inline: var(--gutter);
+  padding-bottom: 32px;
+}
+
+.entry-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.entry-main { display: grid; gap: 20px; min-width: 0; }
+
+/* =========================================================================
+   Cards
+   ========================================================================= */
+.card {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px 24px 24px;
+  box-shadow: var(--shadow-card);
+}
+
+/* The accent bar: 4px, fully rounded, set inside the top edge of every stage
+   card. Same green on all three; nothing to clip on the rounded corners. */
+.stage::before {
+  content: "";
+  display: block;
+  height: 4px;
+  margin-bottom: 16px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.stage-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  min-height: 40px;
+}
+.stage-chip {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px; height: 26px;
+  border-radius: 8px;
+  background: var(--band);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.stage-head h2 {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -.01em;
+}
+
+.card > .hint {
+  margin: 4px 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+/* Start of day and End of day have no caption, so their first row takes the
+   space from the heading instead. */
+.card > .stage-head + :not(.hint) { margin-top: 12px; }
+
+/* ---- the category sub-cards inside "Today's numbers": lighter, no bar ---- */
+.subcard + .subcard {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line-soft);
+}
+.subcard h3 {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.subcard > .hint {
+  margin: 2px 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+}
+
+.date-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 10px;
+  max-width: 440px;
+}
+
+#slot-opening { margin-top: 18px; }
+
+/* =========================================================================
+   Fields
+   Selector order matters here: filled < counted < warning outline < focus <
+   invalid. The browser's own validation (.invalid) always wins.
+   ========================================================================= */
+.field { min-width: 0; }
+.field > label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+input[type="text"],
+select {
+  display: block;
+  width: 100%;
+  height: 42px;
+  margin: 0;
+  padding: 0 12px;
+  font-family: var(--sans);
+  font-size: 14.5px;
+  line-height: 1.2;
+  color: var(--ink);
+  background-color: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow: none;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+select {
+  padding-right: 34px;
+  background-image: var(--i-select);
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px 16px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+input[type="text"]::placeholder { color: rgba(91, 102, 96, .88); opacity: 1; }   /* AA on white */
+/* The "0.00" hint in a money box is kept lighter than a typed figure on purpose
+   (about 3.2:1), and 2pt smaller and not bold, so the boxes that were filled in
+   stand out at a glance. The two drawer counts get no "0.00" hint at all: blank
+   there means "not counted". */
+.money input::placeholder { color: rgba(91, 102, 96, .72); font-size: calc(1em - 2pt); font-weight: 400; }
+input[type="text"]:hover,
+select:hover { border-color: var(--line-hover); }
+
+/* ---- money: $ prefix, right-aligned mono figures ---- */
+.money { position: relative; max-width: 320px; }
+.money .sym {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+.money input {
+  padding-left: 28px;
+  padding-right: 12px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  font-variant-numeric: tabular-nums;
+}
+.money input.filled { border-color: var(--line-hover); }
+.money:has(input.filled) .sym { color: var(--ink); }
+
+/* The two drawer counts are counted figures, not calculated ones. */
+.field.counted input { background-color: var(--counted-bg); border-color: var(--counted-line); }
+
+/* ---- warning outline: the most serious warning about this field ---- */
+.field[data-level="1"] { --lv: var(--danger);   --lv-ring: rgba(166, 61, 64, .13); --lv-focus: rgba(166, 61, 64, .24); }
+.field[data-level="2"] { --lv: var(--warn);     --lv-ring: rgba(138, 98, 18, .14); --lv-focus: rgba(138, 98, 18, .26); }
+/* Levels 3 and 4 are only good to know: a half-strength border and no halo, so
+   they never look like the focused box. */
+.field[data-level="3"] { --lv: var(--accent);   --lv-border: rgba(31, 111, 92, .55); --lv-ring: transparent; --lv-focus: var(--ring); }
+.field[data-level="4"] { --lv: var(--ink-soft); --lv-border: rgba(91, 102, 96, .60); --lv-ring: transparent; --lv-focus: rgba(91, 102, 96, .22); }
+.field[data-level] input,
+.field[data-level] select { border-color: var(--lv-border, var(--lv)); box-shadow: 0 0 0 3px var(--lv-ring); }
+.field[data-level] .sym { color: var(--lv); }
+
+/* ---- focus: a border and halo instead of the outline. The outline stays,
+   transparent, so Windows High Contrast (which drops shadows) still shows one. ---- */
+input[type="text"]:focus,
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+}
+.field[data-level] input:focus,
+.field[data-level] select:focus { border-color: var(--lv); box-shadow: 0 0 0 1px var(--lv), 0 0 0 4px var(--lv-focus); }
+
+/* ---- the browser's own validation failed: always takes priority ---- */
+.field input.invalid,
+input.invalid {
+  border-color: var(--danger);
+  background-color: rgba(251, 237, 233, .45);
+  box-shadow: none;
+}
+.field input.invalid:focus,
+input.invalid:focus { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(166, 61, 64, .20); }
+.field:has(input.invalid) .sym { color: var(--danger); }
+
+.err {
+  display: none;
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--danger);
+}
+.err.show { display: block; }
+
+/* =========================================================================
+   Work day / Off day toggle
+   The real control is the visually hidden #chk-closed; the label is what
+   people see and click. `:checked + label` drives the look.
+   ========================================================================= */
+.daytype { position: relative; margin-left: auto; }
+.daytype-input {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 1px; height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.daytype-toggle {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 40px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.daytype-toggle .opt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  transition: background-color .15s ease, color .15s ease, box-shadow .15s ease;
+}
+.daytype-toggle:hover .opt { color: var(--ink); }
+.daytype-input:not(:checked) + .daytype-toggle .opt-trading {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(28, 37, 33, .12), 0 0 0 1px rgba(227, 224, 216, .8);
+}
+/* An off day is a normal state, not an alarm: muted slate, never red. */
+.daytype-input:checked + .daytype-toggle .opt-closed {
+  background: var(--ink-soft);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(28, 37, 33, .18);
+}
+.daytype-input:focus-visible + .daytype-toggle { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* =========================================================================
+   Hint lines, closed note, reason box
+   ========================================================================= */
+.hintline {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 12px;
+  padding: 8px 12px 8px 10px;
+  border-radius: 10px;
+  background: rgba(232, 243, 238, .75);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.hintline::before {
+  content: "";
+  flex: none;
+  width: 15px; height: 15px;
+  margin-top: 2px;
+  background: var(--accent);
+  -webkit-mask: var(--i-info) center / contain no-repeat;
+  mask: var(--i-info) center / contain no-repeat;
+}
+.hintline.off { background: var(--warn-bg); }
+.hintline.off::before { background: var(--warn); }
+
+.closed-note {
+  margin-top: 14px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+.closed-note:empty { display: none; }
+
+.reasonbox {
+  margin-top: 16px;
+  padding: 14px 16px 12px;
+  border-radius: 12px;
+  background: var(--warn-bg);
+  border: 1px solid rgba(138, 98, 18, .20);
+}
+.reasonbox label {
+  display: block;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.reasonbox input[type="text"] { margin-top: 10px; background-color: var(--card); }
+
+/* =========================================================================
+   Warning levels
+   The browser never decides a level; it only shows the one the server sent.
+   These classes turn that level into a colour, a tint and an icon.
+   ========================================================================= */
+.lv1 { --lv: var(--danger);   --lv-bg: var(--danger-bg); --lv-line: rgba(166, 61, 64, .24); --lv-icon: var(--i-stop); }
+.lv2 { --lv: var(--warn);     --lv-bg: var(--warn-bg);   --lv-line: rgba(138, 98, 18, .26); --lv-icon: var(--i-warn); }
+.lv3 { --lv: var(--accent);   --lv-bg: var(--band);      --lv-line: rgba(31, 111, 92, .22); --lv-icon: var(--i-info); }
+.lv4 { --lv: var(--ink-soft); --lv-bg: var(--line-soft); --lv-line: rgba(91, 102, 96, .22); --lv-icon: var(--i-tip); }
+
+/* =========================================================================
+   Checks panel
+   ========================================================================= */
+.checks {
+  min-width: 0;
+  padding: 12px 8px 8px;
+  border-radius: 16px;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--shadow-card);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(91, 102, 96, .35) transparent;
+}
+
+.checks-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+.checks-head h2 { font-size: 15px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; }
+.checks-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--lv-bg);
+  color: var(--lv);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.checks-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.checks-empty::before {
+  content: "";
+  flex: none;
+  width: 18px; height: 18px;
+  background: var(--i-ok) center / contain no-repeat;
+}
+
+.checks-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One warning: the row's own button (icon, title, level), then its
+   "See full explanation" link. The hover and the tint of an open explanation
+   belong to the whole row, so the link reads as part of it. */
+.check {
+  position: relative;
+  border-radius: 10px;
+  transition: background-color .15s ease;
+}
+.check:hover { background: var(--hover-ink); }
+.check.selected { background: var(--lv-bg); }   /* its explanation is open in the dock */
+.check.selected::before {
+  content: "";
+  position: absolute;
+  left: 3px; top: 9px; bottom: 9px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--lv);
+}
+
+.check-btn {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  /* Hardly any padding underneath: the link sits straight under the row's words. */
+  padding: 9px 10px 1px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+.check-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.check-more {
+  display: block;
+  width: fit-content;
+  /* Its words line up with the title: 12px row padding + 18px icon + 10px gap,
+     less the link's own 4px side padding. */
+  margin: 0 0 0 36px;
+  padding: 2px 4px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.check-more:hover { color: var(--accent-dk); text-decoration-thickness: 2px; }
+.check-more:focus-visible { outline-offset: 0; }
+
+.check-icon {
+  display: block;
+  width: 18px; height: 18px;
+  background: var(--lv);
+  -webkit-mask: var(--lv-icon) center / contain no-repeat;
+  mask: var(--lv-icon) center / contain no-repeat;
+}
+
+.check-body { display: block; min-width: 0; }
+.check-title {
+  display: block;
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.check-meta {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+/* =========================================================================
+   Dock
+   The last block of the form, straight after End of day and as wide
+   as the cards. It scrolls with the page instead of floating over it, so it
+   never hides a box while figures are being typed.
+   ========================================================================= */
+.dock {
+  padding: var(--dock-pad);
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+}
+
+/* ---- explanation row: one warning, in full, opened from the Checks panel ---- */
+.dock-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 12px;
+  background: var(--lv-bg);
+  border: 1px solid var(--lv-line);
+}
+.note-icon {
+  flex: none;
+  width: 16px; height: 16px;
+  margin-top: 10px;
+  background: var(--lv);
+  -webkit-mask: var(--lv-icon) center / contain no-repeat;
+  mask: var(--lv-icon) center / contain no-repeat;
+}
+.note-text {
+  flex: 1;
+  min-width: 0;
+  /* The whole message, however many lines it takes: this is the only place
+     its full text is shown, and the dock is part of the page, so a longer
+     message covers nothing. */
+  margin: 7px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.note-close {
+  position: relative;
+  flex: none;
+  margin: 2px 0;
+  display: grid;
+  place-items: center;
+  width: 32px; height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+.note-close:hover { background: var(--hover-ink); color: var(--ink); }
+/* Small to look at, 40px to hit. */
+.note-close::after { content: ""; position: absolute; inset: -4px; }
+
+/* ---- tick boxes: only when a save needs one (the first day on record, or a
+   ledger file already made for the day), right above the buttons. Quiet until
+   ticked, then tinted green so the choice reads at a glance. ---- */
+.checkline {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--page);
+  border: 1px solid var(--line);
+  font-size: 13.5px;
+  line-height: 1.45;
+  cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.checkline:hover { border-color: var(--line-hover); }
+.checkline:has(input:checked) { background: rgba(232, 243, 238, .55); border-color: rgba(31, 111, 92, .40); }
+.checkline input[type="checkbox"] {
+  flex: none;
+  width: 18px; height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.checkline .muted { display: block; margin-top: 2px; }
+
+/* ---- main row: totals, then the actions ---- */
+.dock-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  min-height: var(--dock-row);
+  padding-left: 8px;
+}
+
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px 24px;
+  margin: 0;
+  min-width: 0;
+}
+.totals > div { min-width: 0; }
+.totals dt {
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.totals dd {
+  margin: 1px 0 0;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Clear, Cancel edit (only while editing), Save and Next day. Save is the only
+   filled button of the four, so the main action is obvious at a glance; Next
+   day sits beside it as an outline. They wrap rather than shrink, so no row of
+   buttons ever pushes the page sideways. */
+.dock-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ---- status pill (narrow screens only) ---- */
+.dock-status {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 10px 0 11px;
+  border-radius: 999px;
+  background: var(--lv-bg);
+  border: 1px solid var(--lv-line);
+  color: var(--lv);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dock-status::before,
+.dock-status::after {
+  content: "";
+  flex: none;
+  background: currentColor;
+}
+.dock-status::before {
+  width: 16px; height: 16px;
+  -webkit-mask: var(--lv-icon) center / contain no-repeat;
+  mask: var(--lv-icon) center / contain no-repeat;
+}
+/* The list opens below the dock, so the chevron points down until it is open. */
+.dock-status::after {
+  width: 14px; height: 14px;
+  opacity: .8;
+  -webkit-mask: var(--i-chev) center / contain no-repeat;
+  mask: var(--i-chev) center / contain no-repeat;
+  transform: rotate(180deg);
+  transition: transform .15s ease;
+}
+.dock-status[aria-expanded="true"]::after { transform: none; }
+
+/* ---- the answer to Next day, under the buttons that asked for it. The last
+   line of the dock and part of the page like the rest of it, so it covers
+   nothing; it lines up with the buttons at the right-hand end of the row. Its
+   two kinds match the banner's: warn for the server's refusal, info for
+   "there is no next day yet". ---- */
+.dock-msg {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.dock-msg.warn { color: var(--warn);   background: var(--warn-bg); border-color: rgba(138, 98, 18, .26); }
+.dock-msg.info { color: var(--accent); background: var(--band);    border-color: rgba(31, 111, 92, .22); }
+
+/* =========================================================================
+   Buttons
+   ========================================================================= */
+button {
+  font-family: var(--sans);
+}
+.btn-primary,
+.btn-ghost,
+.btn-quiet,
+.btn-danger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  margin: 0;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(23, 86, 73, .25), 0 4px 12px -4px rgba(31, 111, 92, .35);
+}
+.btn-primary:hover:not(:disabled) { background: var(--accent-dk); border-color: var(--accent-dk); }
+
+.btn-ghost {
+  background: var(--card);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.btn-ghost:hover:not(:disabled) { border-color: var(--line-hover); background: var(--page); }
+
+.btn-quiet {
+  background: transparent;
+  color: var(--ink-soft);
+  padding: 0 12px;
+}
+.btn-quiet:hover:not(:disabled) { color: var(--ink); background: var(--hover-ink); }
+
+.btn-danger {
+  background: var(--card);
+  border-color: rgba(166, 61, 64, .30);
+  color: var(--danger);
+}
+.btn-danger:hover:not(:disabled) { background: var(--danger-bg); border-color: rgba(166, 61, 64, .45); }
+
+.mini {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+/* Small to look at, 40px to hit. */
+.mini::after { content: ""; position: absolute; inset: -4px; }
+
+button:disabled,
+button:disabled:hover {
+  opacity: .42;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* =========================================================================
+   Banners (glass, tinted by kind)
+   ========================================================================= */
+.banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 16px;
+  padding: 8px 8px 8px 14px;
+  min-height: 50px;
+  border-radius: 14px;
+  border: 1px solid var(--lv-line);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  box-shadow: 0 1px 2px rgba(28, 37, 33, .04), 0 10px 28px -16px rgba(28, 37, 33, .20);
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.banner::before {
+  content: "";
+  flex: none;
+  width: 17px; height: 17px;
+  background: var(--lv);
+  -webkit-mask: var(--lv-icon) center / contain no-repeat;
+  mask: var(--lv-icon) center / contain no-repeat;
+}
+.banner span { flex: 1; min-width: 0; padding-block: 4px; }
+.banner > button { margin-left: auto; }
+.banner.info  { --lv: var(--accent); --lv-line: rgba(31, 111, 92, .18); --lv-icon: var(--i-info); background: rgba(232, 243, 238, .80); }
+.banner.warn  { --lv: var(--warn);   --lv-line: rgba(138, 98, 18, .24); --lv-icon: var(--i-warn); background: rgba(253, 244, 227, .84); }
+.banner.error { --lv: var(--danger); --lv-line: rgba(166, 61, 64, .24); --lv-icon: var(--i-stop); background: rgba(251, 237, 233, .86); color: var(--danger); }
+
+/* =========================================================================
+   Watermark
+   The bottom-left corner of the page: the very end of the page, below the
+   dock, lined up with the left edge of the cards. It scrolls with the page
+   like everything else and is never fixed to the window.
+   ========================================================================= */
+.watermark {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  height: 28px;
+  margin: 32px 0 0;
+  padding: 0 10px 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(91, 102, 96, .22);
+  background: rgba(250, 249, 246, .60);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-soft);
+  opacity: .9;
+  white-space: nowrap;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.watermark svg { display: block; flex: none; width: 12px; height: 12px; }
+.watermark b { font-weight: 600; }
+
+/* =========================================================================
+   Wide screens: Checks in its own column (1100px and up)
+   ========================================================================= */
+@media (min-width: 1100px) {
+  .entry-grid { grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; }
+  /* The panel may scroll on its own, but the wheel must carry on to the page
+     once it has nothing left to scroll: with overscroll-behavior: contain,
+     resting the pointer over the panel stopped the page dead, even when the
+     panel had two rows and nothing to scroll.
+
+     The panel sticks inside its grid area, which ends 92px above the end of
+     the page (the watermark, its margin and the page padding). A panel taller
+     than the space between top: 24px and that line was pulled off the top of
+     the window during the last 68px of scroll, so its height now stops 92px
+     short of the bottom of the window instead of 24px. */
+  .checks {
+    position: sticky;
+    top: 24px;
+    max-height: calc(100vh - 116px);
+    overflow: auto;
+  }
+  .dock-status { display: none; }
+}
+
+/* =========================================================================
+   Below 1100px: one column; the dock's status pill opens Checks below the dock
+   ========================================================================= */
+@media (max-width: 1099.98px) {
+  /* Closed until the pill opens it. Open, it is simply the next block in the
+     page after the dock, so it covers nothing either. */
+  .checks { display: none; }
+  .checks.open {
+    display: block;
+    animation: sheet-in .16s ease-out;
+  }
+  .dock-status { display: inline-flex; }
+}
+
+/* A fade only: app.js scrolls the panel into view as it opens, and a moving
+   panel would be measured in the wrong place. */
+@keyframes sheet-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* =========================================================================
+   Small screens
+   ========================================================================= */
+@media (max-width: 720px) {
+  :root { --gutter: 16px; }
+
+  .topbar { padding-block: 14px; }
+
+  .page { padding-top: 16px; }
+  .card { padding: 16px 16px 20px; }
+  .stage::before { margin-bottom: 14px; }
+
+  .grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .money { max-width: none; }
+
+  /* Totals take one compact row of three; the four buttons wrap underneath,
+     and Save and Next day stretch to fill the row they land on, so every
+     button stays easy to tap and nothing spills off the side. */
+  .dock-main { gap: 8px; padding-left: 0; }
+  .totals {
+    order: -1;
+    flex: 1 1 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, auto));
+    justify-content: space-between;
+    gap: 4px 10px;
+    padding: 2px 6px 4px;
+  }
+  .totals dt { font-size: 10px; letter-spacing: .04em; }
+  .totals dd { font-size: 13px; overflow-wrap: anywhere; white-space: normal; }
+  .dock-actions { display: contents; }
+  .dock-actions button { flex: 0 0 auto; padding: 0 12px; font-size: 13.5px; }
+  .dock-actions .btn-quiet { padding: 0 10px; }
+  .dock-actions .btn-ghost,
+  .dock-actions .btn-primary { flex: 1 0 auto; }
+  .dock-status { padding: 0 9px 0 10px; gap: 6px; }
+
+  /* .dock-actions is display:contents here, so the buttons wrap across the
+     whole row instead of sitting at its right-hand end; the message follows
+     them and starts at the left edge. */
+  .dock-msg { text-align: left; }
+
+  .dock-note { padding-left: 10px; }
+  .note-text { font-size: 12.5px; }
+
+  .banner { padding-left: 12px; }
+}
+
+@media (max-width: 480px) {
+  /* The Work day / Off day toggle gets its own row under the card title. */
+  .daytype { flex: 1 1 100%; margin: 2px 0 8px; }
+  .daytype-toggle { display: flex; width: 100%; }
+  .daytype-toggle .opt { flex: 1 1 0; }
+
+  .date-row { gap: 8px; }
+  .brand-sub { font-size: 12.5px; }
+
+  /* A banner's button moves under its text instead of squeezing it. */
+  .banner span { flex-basis: calc(100% - 29px); }
+}
+
+/* =========================================================================
+   Accessibility preferences
+   ========================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Keep the CSS-drawn icons visible in Windows High Contrast mode. */
+@media (forced-colors: active) {
+  .check-icon, .note-icon, .hintline::before, .banner::before,
+  .dock-status::before, .dock-status::after {
+    forced-color-adjust: none;
+    background-color: CanvasText;
+  }
+  .stage::before { forced-color-adjust: none; background: CanvasText; }
+}
+
+/* Without backdrop blur, make the glass nearly opaque so text stays readable. */
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  :root { --glass: rgba(255, 255, 255, .94); }
+}

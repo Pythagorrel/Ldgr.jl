@@ -1,0 +1,5 @@
+# The built system image. Hundreds of megabytes, machine-specific, and rebuilt
+# from build_sysimage.jl whenever it is wanted.
+*.dll
+*.so
+*.dylib

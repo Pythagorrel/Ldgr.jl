@@ -1,0 +1,7 @@
+# The mailbox settings hold a password that can send mail as the clinic.
+# notify.example.toml is committed in its place; see Notify.jl.
+notify.toml
+
+# Scratch files from an interrupted journal write (Layout.temp_path). A real
+# run removes its own; one left behind is debris, not a record.
+*.tmp
