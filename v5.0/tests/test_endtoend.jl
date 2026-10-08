@@ -173,6 +173,22 @@ und = findfirst(r -> r.Account == deposit[1].account, rows2)
 ok("undeposited == cash to be deposited (POS no longer subtracted)",
    und !== nothing && rows2[und].Debit == 75000.0)
 
+# The ledger file is what QuickBooks imports, so its amounts are written out with
+# two decimals: CSV.jl on its own writes 1,350,000 as "1.35e6" and a sum of cents
+# as "0.09999999999999998".
+lp = tempname() * ".csv"
+write_ledger_csv(Dict(:cash_sales=>1350000.0, :POS_Scotia=>0.0, :POS_RBL=>0.0, :POS_U=>0.0),
+                 Dict(:doctor_fees=>0.0, :medical_supply_costs=>0.0,
+                      :miscellaneous_costs=>0.0, :taxi_fare=>0.0),
+                 Dict(:deposits=>0.0), Dict(:Mr_Boyle=>0.0), lp;
+                 day_variance=0.4 - (0.1 + 0.2))
+lt = read(lp, String)
+rm(lp; force=true)
+ok("ledger amounts from a million up are written out in full",
+   occursin(",1350000.00,", lt) && occursin(",,1350000.00", lt))
+ok("a sum of cents is written to the cent, with no exponent anywhere",
+   occursin(",0.10,", lt) && occursin(",,0.10", lt) && !occursin(r"\d[eE][-+]?\d", lt))
+
 # ---------------------------------------------------------------- MONTH CHECK
 println("\nMonth-level check")
 chk = Chain.month_chain_check(2026, 6)

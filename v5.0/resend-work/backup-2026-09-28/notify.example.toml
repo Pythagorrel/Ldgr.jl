@@ -1,0 +1,73 @@
+# ldgr — email settings.
+#
+# Copy this file to "notify.toml" beside it and fill it in. notify.toml is never
+# committed: it holds a password.
+#
+# WITH NO notify.toml THE PROGRAM SIMPLY DOES NOT SEND EMAIL. Nothing else
+# changes — days are checked, saved and reported exactly as before, the record
+# of what was entered and what was changed is still written to "Change Log.csv"
+# in the Records folder, and the terminal says "Email : off (no notify.toml)"
+# when the server starts. That is the state a fresh copy is in.
+#
+# WHAT IS SENT, AND WHEN. One report a day, at the time given below, listing:
+#   * the days that were entered, with any difference and the reason typed for
+#     it, and Off days named as Off days;
+#   * days already in the books that were changed on a later date, or changed
+#     while their ledger was still waiting — what moved, from what to what, who
+#     did it and when;
+#   * a day that did not balance and now does;
+#   * gaps that were filled, and the ledgers that entering the missing day
+#     released, with any difference that turned up in the process;
+#   * the days whose ledgers are still waiting, repeated every day until the
+#     list is empty.
+#
+# A QUIET DAY STILL SENDS A SHORT "nothing to report" MESSAGE. That is on
+# purpose: it means silence is a signal. If no report arrives, either the
+# program was not running or these settings need attention.
+#
+# IF THE PROGRAM WAS NOT RUNNING AT THE SEND TIME, the report is not lost. The
+# next time the server starts it notices, and sends ONE message covering the
+# whole missed period.
+#
+# A DAY CORRECTED ON THE SAME DATE IT WAS FIRST ENTERED IS NOT REPORTED. Staff
+# may fix what they typed for as long as they are still on that day. It is a
+# correction made later, or one made to a day whose ledger nobody has seen yet,
+# that appears in the report.
+
+# Where the report goes. The owner, or the clinic's own mailbox.
+to = "owner@example.com"
+
+# The address it comes FROM. Leave it out and it defaults to `user` below,
+# which is almost always what you want: Gmail and most other providers reject a
+# message whose sender is not the mailbox that signed in.
+from = "clinic@example.com"
+
+# The outgoing mail server. "smtps://" means the connection is encrypted from
+# the start, which is what port 465 expects; a server that wants STARTTLS on
+# port 587 is written "smtp://smtp.example.com:587".
+smtp = "smtps://smtp.gmail.com:465"
+
+# The mailbox to sign in as. The full address, not just the name in front of
+# the @.
+user = "clinic@example.com"
+
+# AN APP PASSWORD, NOT THE MAILBOX PASSWORD. Gmail refuses an ordinary password
+# from a program. To make one:
+#   1. Turn on 2-Step Verification for the mailbox — an app password cannot be
+#      created without it.
+#   2. Go to the Google Account for that mailbox, then Security, then
+#      App passwords.
+#   3. Name it "ldgr" and create it. Google shows a 16-character password once.
+#   4. Paste it here, spaces and all.
+# It can send mail as the clinic, so this file belongs on the clinic's machine
+# and nowhere else. It can be revoked on its own from the same page, without
+# changing the mailbox password.
+password = "xxxx xxxx xxxx xxxx"
+
+# Put in front of every subject line, so the reports thread and filter together.
+subject_prefix = "ldgr: "
+
+# When the report goes out, on a 24-hour clock, in the clinic's own time — the
+# machine's clock. "18:30" is half past six in the evening. Leave it out and
+# that is what is used.
+send_at = "18:30"

@@ -18,7 +18,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Daily Entry — ldgr</title>
+  <title>LDGR</title>
   <!-- Nothing is fetched from the internet: ldgr runs entirely on the clinic's
        own machine. The page uses the fonts already installed (see --sans and
        --mono in styles.css). -->
@@ -35,8 +35,8 @@
       </svg>
     </span>
     <div class="brand-text">
-      <h1>Daily Entry</h1>
-      <p class="brand-sub">Enter each day, check it, then save it to the books</p>
+      <h1>LDGR</h1>
+      <p class="brand-sub">Urgent Care</p>
     </div>
   </div>
 </header>
@@ -101,25 +101,24 @@
         </section>
 
         <!-- Dock: the full explanation of one warning (opened from "See full explanation"
-             in the Checks panel), the tick boxes a save sometimes needs, running totals,
+             in the Checks panel), the tick box a save sometimes needs, running totals,
              and the actions. It is the last thing in the form, after End of day, and
              scrolls with the page, so it never covers a box while figures are typed.
 
              The two actions are separate: Save writes the day to the books and stays
              on it, and Next day moves to the day after. Next day never saves; the
-             server refuses to move on from a day whose figures are not in the books. -->
+             server refuses to move on from a day whose figures are not in the books.
+             That a day is saved is said by the Checks panel; the line under the buttons
+             says it only when the panel is out of sight (a narrow window) or the server
+             has a warning to add. -->
         <div id="dock" class="dock">
           <div id="dock-note" class="dock-note" tabindex="-1" hidden></div>
-          <!-- Each tick box shows only when it applies to the date on screen, which the
-               server says with every check. Saving writes the day straight to the books. -->
+          <!-- The first-day tick box shows only when it applies to the date on screen,
+               which the server says with every check. Saving writes the day straight
+               to the books, and always makes its ledger file again. -->
           <label class="checkline" id="genesis-line" hidden>
             <input type="checkbox" id="chk-genesis">
             <span>This is the <b>first day on record</b>. Accept its opening balance as the starting point.</span>
-          </label>
-          <label class="checkline" id="force-line" hidden>
-            <input type="checkbox" id="chk-force">
-            <span>Replace the ledger file already made for this day.
-              <span class="muted">(Leave unticked to keep the old file.)</span></span>
           </label>
           <div class="dock-main">
             <button id="dock-status" class="dock-status" type="button"
@@ -130,17 +129,17 @@
               <div><dt>Banked</dt><dd id="tot-dep">$0.00</dd></div>
             </dl>
             <div class="dock-actions">
-              <button class="btn-quiet"   id="btn-clear"       type="button">Clear</button>
-              <button class="btn-ghost"   id="btn-cancel-edit" type="button" hidden>Cancel edit</button>
-              <button class="btn-primary" id="btn-save"        type="button">Save</button>
-              <button class="btn-ghost"   id="btn-next"        type="button">Next day</button>
+              <button class="btn-quiet"   id="btn-clear"       type="button" title="Clear (Ctrl+Alt+C)" aria-keyshortcuts="Control+Alt+C">Clear</button>
+              <button class="btn-primary" id="btn-save"        type="button" title="Save (Ctrl+S)" aria-keyshortcuts="Control+S">Save</button>
+              <button class="btn-ghost"   id="btn-next"        type="button" title="Next day (Ctrl+N)" aria-keyshortcuts="Control+N">Next day</button>
             </div>
           </div>
-          <!-- What the server answered about Next day, under the button that
-               asked. The banner at the top of the page is off screen when
-               somebody is down here at the buttons, so that answer was being
-               missed. It is the last thing in the dock, in the page flow like
-               everything else here, so it covers nothing. -->
+          <!-- What the server answered about Next day, or that a day was saved when
+               the Checks panel cannot say so (a narrow window, or with a warning from
+               the server), under the button that asked. The banner at the top of
+               the page is off screen when somebody is down here at the buttons, so
+               that answer was being missed. It is the last thing in the dock, in the
+               page flow like everything else here, so it covers nothing. -->
           <p id="dock-msg" class="dock-msg" role="status" hidden></p>
         </div>
       </div>
@@ -154,6 +153,19 @@
         </div>
         <p id="checks-empty" class="checks-empty">Nothing to fix so far</p>
         <ul id="checks-list" class="checks-list"></ul>
+        <!-- Not a check: it says what saving a day that already has a ledger will do.
+             app.js shows it with the day facts; it is left out of the count above. -->
+        <p id="checks-regen" class="checks-note" hidden>Saving again will regenerate the ledgers with the current figures and accounts.</p>
+        <!-- The same for any other saved day: one whose ledger is still waiting on the
+             day before, or an Off day, which has no ledger. An Off day has no figures
+             on screen, so app.js hides the second sentence for it. -->
+        <p id="checks-saved" class="checks-note" hidden>This day has been saved.<span id="checks-saved-more"> Saving again will rewrite it with the current figures.</span></p>
+        <!-- Not a check either: a saved day comes up in the form by itself when its date
+             is reached. After Clear on a saved day, this link (or Ctrl+Alt+Z) brings it
+             back. The sentence under it says when a date could not be looked up, or why
+             bringing it back failed. -->
+        <button id="checks-load" class="checks-load" type="button" title="Show saved figures (Ctrl+Alt+Z)" aria-keyshortcuts="Control+Alt+Z" hidden>Show saved figures</button>
+        <p id="checks-load-msg" class="checks-load-msg" role="status" hidden></p>
         <p id="checks-live" class="sr-only" aria-live="polite"></p>
       </aside>
     </div>

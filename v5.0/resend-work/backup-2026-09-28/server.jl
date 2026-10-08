@@ -39,14 +39,6 @@ include("main.jl")                        # Config, Layout, DayInput, Journal, L
 
 # v4.0: Checks/Chain/Report come in through main.jl above.
 
-# The daily report's email service. Included here and not in main.jl, so the
-# command line never loads it (it never sends — the next server start picks up
-# whatever it saved). Notify.jl decides what to send and when; these two calls
-# are how. Nothing is exported from Resend: `send` would collide with Sockets'.
-include("Resend.jl");   using .Resend
-Notify.MAILER[] = (send   = (key, email, idem) -> Resend.send(key, email; idempotency_key = idem),
-                   cancel = Resend.cancel)
-
 const PUBLIC_DIR = joinpath(@__DIR__, "public")
 const PORT = isempty(ARGS) ? 8000 : parse(Int, ARGS[1])
 
@@ -189,7 +181,7 @@ function record_from_payload(body)
 end
 
 """
-    day_context(d) -> (prior, first_day, genesis, ledger_exists, in_books, next_in_books, next_work)
+    day_context(d) -> (prior, first_day, genesis, ledger_exists, in_books, next_in_books)
 
 The facts about `d` that both the checks and the response need, read from the
 books ONCE.
@@ -214,9 +206,7 @@ keeps the checks from claiming the day before it is missing.
 
 `in_books` and `next_in_books` come from one read of the month's journal: whether
 this date has a row, and whether the day after it does — an entry under a day
-that is already on record is filling a gap (L3-E). `next_work` is the Work day
-that gap releases, stepping over saved Off days (Chain.next_work_day), and is
-looked up only when the day after is on record; L3-E names it, never an Off day.
+that is already on record is filling a gap (L3-E).
 """
 function day_context(d::Date)
     prior     = Chain.prior_day(d)
@@ -225,8 +215,7 @@ function day_context(d::Date)
     return (prior = prior, first_day = first_day,
             genesis = first_day && !recorded,
             ledger_exists = isfile(daily_ledger_path(d)),
-            in_books = recorded, next_in_books = next_recorded,
-            next_work = next_recorded ? Chain.next_work_day(d) : nothing)
+            in_books = recorded, next_in_books = next_recorded)
 end
 
 """
@@ -245,8 +234,7 @@ day_findings(rec::DayRecord, ctx = day_context(rec.date)) =
               is_genesis    = ctx.first_day,
               ledger_exists = ctx.ledger_exists,
               in_books      = ctx.in_books,
-              next_in_books = ctx.next_work !== nothing,
-              next_date     = something(ctx.next_work, rec.date + Day(1)))
+              next_in_books = ctx.next_in_books)
 
 """
     findings_json(fs) -> Vector{FindingJSON}
@@ -350,16 +338,13 @@ end
 """
 GET /api/day?date=YYYY-MM-DD
 
-A day that is already in the books, so it can be read back. The form asks for
-the date it lands on (opening, picking a date, Next day), so a saved day comes
-up as it was saved. `day` is null when that date has not been saved, and the
-form stays blank.
+A day that is already in the books, so the form can load it back to correct it
+("Edit that day"). `day` is null when that date has not been saved.
 
 These are the figures that were typed for THAT date, balances included, and
-they are only ever put back on that same date. Nothing here fills in a day that
-has not been entered, so no balance is pre-filled or worked out for anyone
-(README rules 3 and 4). An Off day's balances were carried through, not counted,
-so the form leaves its boxes blank.
+they are sent only when someone asks to edit that date. Nothing here fills in
+a day that has not been entered, so no balance is pre-filled or worked out for
+anyone (README rules 3 and 4).
 """
 function handle_day(uri)
     q = HTTP.queryparams(uri)
@@ -433,8 +418,8 @@ Save is pressed:
     yet, so saving it needs the first-day box ticked. A first day that is
     already in the books has answered that question once and is not asked
     again (see day_context);
-  * `hasDailyLedger`: a ledger file already exists for this date; the form
-    replaces it on every save (it always sends `force`);
+  * `hasDailyLedger`: a ledger file already exists for this date, and stays as
+    it is unless the replace box is ticked;
   * `inBooks`: this date is already saved, so saving it again replaces it.
 
 THE RESPONSE IS A Dict{String,Any} FOR SPEED, not for taste. `predicted`,
@@ -487,7 +472,7 @@ cannot be saved, and the form shows them while the figures are typed, so a day
 is written the moment it is saved. That also means the next day is checked
 against it straight away, rather than only once a whole batch had been written.
 
-The refusals below come before process_day so that the form gets an
+The three refusals below come before process_day so that the form gets an
 answer it can act on. process_day makes the same tests again, and its copy is
 the one that counts (Handover §4 rule 5).
 """
@@ -548,10 +533,8 @@ function handle_save(req)
     # form, or --first-day on the command line. `ctx.genesis` is false once the
     # date is in the books, so correcting the first day later is an ordinary
     # save — it is not asked to authorise itself again, and process_day makes the
-    # same distinction rather than taking this refusal's word for it. An Off day
-    # is never the starting point (it has no balance of its own), so it saves
-    # without the tick and the first Work day after it is asked instead.
-    if ctx.genesis && !is_closed(rec) && !allowGenesis
+    # same distinction rather than taking this refusal's word for it.
+    if ctx.genesis && !allowGenesis
         return json(400, (ok=false, needsGenesis=true,
                           error="This is the first day on record. Tick the box to accept its " *
                                 "opening balance as the starting point, then save again."))
@@ -591,17 +574,6 @@ function handle_save(req)
         Changes.after_save(outcome; rec = rec, previous = previous, before = ctx)
     catch e
         @warn "The change log could not be written" exception=e
-    end
-
-    # The daily report: hand the coming version to Resend again, now that the
-    # change log has this save in it — so a day typed just before ldgr is closed
-    # still goes out at the send time. `poke` only starts a background task and
-    # returns, so this reply never waits on the network; with the scheduler off
-    # (no notify.toml, LDGR_NO_DIGEST=1, the tests) it does nothing at all.
-    try
-        Notify.poke()
-    catch e
-        @warn "The daily report could not be updated" exception=e
     end
 
     # One declared container, for the same reason as /api/check: `released` is
@@ -926,36 +898,21 @@ function warmup()
     Report.report_path(today)
 
     # --- The change log and the daily report ---------------------------------
-    # Built, never written, and never sent. `Changes.after_save` appends under
-    # ROOT and `Notify.tick` writes its state files and calls Resend, none of
-    # which the warm-up may do, so those are compiled by signature only;
-    # everything else below is read-only and network-free, and answers honestly
-    # on an empty records folder — no rows, nothing waiting, no settings, no
-    # report yet. `build_report` (the text and the HTML body) is the expensive
-    # part of a tick and is the one worth running here.
+    # Built, never written. `Changes.after_save` appends under ROOT, which the
+    # warm-up may not touch, so it is compiled by signature only; everything
+    # else below is read-only and answers honestly on an empty records folder —
+    # no rows, nothing waiting, no mailbox, no report yet. `build_digest` is the
+    # expensive half of half past six and is the one worth doing here.
     precompile(Core.kwcall, (NamedTuple{(:rec, :previous, :before),
                                         Tuple{DayRecord, Nothing, typeof(day_context(today))}},
                              typeof(Changes.after_save), typeof(outcome)))
     Changes.first_seen(today)
     Changes.rows_between(nothing, Dates.now())
-    Changes.rows_checked(nothing, Dates.now())
     Chain.waiting_ledgers()
-    Notify.settings(); Notify.enabled(); Notify.banner()
-    Notify.latest_cutoff(Dates.now(), Notify.DEFAULT_SEND_AT)
-    Notify.next_cutoff(Dates.now(), Notify.DEFAULT_SEND_AT)
+    Notify.settings(); Notify.enabled()
+    Notify.latest_cutoff(Dates.now(), Dates.Time(18, 30))
     Notify.last_reported()
-    Notify._read_state()
-    report_subject, report_body, report_html = Notify.build_report(nothing, Dates.now())
-    sample = (to = "owner@example.invalid", api_key = "", from = "LDGR Daily Report <reports@example.invalid>",
-              subject_prefix = "ldgr: ", send_at = Notify.DEFAULT_SEND_AT)
-    email = Notify._email(sample, report_subject, report_body; html = report_html,
-                          scheduled_at = Notify._utc_text(Notify.next_cutoff(Dates.now(), sample.send_at)))
-    Notify._hash16(email)
-    JSON3.write(email)
-    precompile(Core.kwcall, (NamedTuple{(:poked,), Tuple{Bool}}, typeof(Notify.tick)))
-    precompile(Core.kwcall, (NamedTuple{(:idempotency_key,), Tuple{String}},
-                             typeof(Resend.send), String, Dict{String,Any}))
-    precompile(Resend.cancel, (String, String))
+    Notify.build_digest(nothing, Dates.now())
 
     # Every response shape JSON3 has to write, including the 200 from a save.
     JSON3.write(Dict{String,Any}("ok" => true, "date" => string(today), "closed" => false,
@@ -1082,81 +1039,16 @@ function profile_dir()
 end
 
 """
-    launch_flags(url, profile) -> Vector{String}
-
-The command-line flags for the app window. `--start-maximized` rather than a
-fixed `--window-size`: the window fills the screen (no dead space at the sides)
-yet keeps its close button, which true F11 fullscreen would hide from
-non-technical staff.
-
---no-first-run and --no-default-browser-check exist because the profile is
-private and therefore new on first launch, which otherwise triggers Chrome's
-welcome wizard and a "make Chrome your default" prompt in front of the form.
-"""
-launch_flags(url::AbstractString, profile::AbstractString) = [
-    "--app=$url", "--user-data-dir=$profile",
-    "--no-first-run", "--no-default-browser-check",
-    "--start-maximized",
-]
-
-"""
-    reset_zoom!(prefs_path) -> Bool
-
-Chrome remembers page zoom per host inside the profile, so one press of
-Ctrl+minus would make every later launch open zoomed out. This removes the
-`127.0.0.1` and `localhost` entries from every partition under
-`partition.per_host_zoom_levels`, and `partition.default_zoom_level`, so the
-window opens at 100%. Everything else in the file is left as it is.
-
-Returns true only if the file was rewritten. Never throws: a missing file,
-unreadable JSON or a failed write is skipped quietly. The file is written only
-when something changed, through a temp file in the same folder put in place with
-`Base.Filesystem.rename` (not `mv(...; force = true)`, which on Julia 1.9 deletes
-the old file first, so a crash could leave neither).
-"""
-function reset_zoom!(prefs_path::AbstractString)::Bool
-    tmp = string(prefs_path, ".ldgr-tmp")
-    try
-        isfile(prefs_path) || return false
-        prefs = JSON3.read(read(prefs_path, String), Dict{String,Any})
-        part = get(prefs, "partition", nothing)
-        part isa AbstractDict || return false
-        changed = false
-        zl = get(part, "per_host_zoom_levels", nothing)
-        if zl isa AbstractDict
-            for (_, hosts) in zl
-                hosts isa AbstractDict || continue
-                for h in ("127.0.0.1", "localhost")
-                    if haskey(hosts, h)
-                        delete!(hosts, h)
-                        changed = true
-                    end
-                end
-            end
-        end
-        if haskey(part, "default_zoom_level")
-            delete!(part, "default_zoom_level")
-            changed = true
-        end
-        changed || return false
-        write(tmp, JSON3.write(prefs))
-        Base.Filesystem.rename(tmp, prefs_path)
-        return true
-    catch err
-        @debug "reset_zoom! skipped" exception = err
-        try; isfile(tmp) && rm(tmp; force = true); catch; end
-        return false
-    end
-end
-
-"""
     open_browser(port)
 
 Open the form. Never throws in normal use, and never blocks: `wait = false`
 matters because a Chrome window opened with its own profile stays alive until
 the user closes it, and a blocking `run` here would mean the server never
-starts. The window opens maximized (see `launch_flags`) and at 100% zoom (see
-`reset_zoom!`).
+starts.
+
+--no-first-run and --no-default-browser-check exist because the profile is
+private and therefore new on first launch, which otherwise triggers Chrome's
+welcome wizard and a "make Chrome your default" prompt in front of the form.
 """
 function open_browser(port::Int)
     url = "http://127.0.0.1:$port"
@@ -1167,11 +1059,9 @@ function open_browser(port::Int)
         if i !== nothing
             profile = profile_dir()
             mkpath(profile)
-            # If the ldgr window is already open, Chrome keeps its own copy of
-            # the settings in memory, so this reset takes effect on the next
-            # fresh launch.
-            reset_zoom!(joinpath(profile, "Default", "Preferences"))
-            run(Cmd([cands[i]; launch_flags(url, profile)]); wait = false)
+            run(`$(cands[i]) --app=$url --user-data-dir=$profile
+                 --no-first-run --no-default-browser-check
+                 --window-size=1280,900`; wait = false)
             return nothing
         end
         run(`cmd /c start "" $url`; wait = false)     # default browser
@@ -1203,9 +1093,10 @@ function start()
     println("  Records folder : $(Layout.ROOT)")
     # Said out loud at every start, because the failure this guards against is
     # silence: an owner who believes a report is coming and never learns that
-    # the settings file was never filled in — or still holds the old Gmail
-    # settings, which have no Resend api_key and so leave email off.
-    println("  Email          : " * Notify.banner())
+    # the settings file was never filled in.
+    println("  Email          : " * (Notify.enabled() ?
+        "on -> $(Notify.recipient())  (daily report at $(Notify.send_at_text()))" :
+        "off (no notify.toml)"))
     println()
     println("  Open this in your browser:  http://127.0.0.1:$PORT")
     println("  Press Ctrl+C in this window to stop.")
@@ -1230,11 +1121,23 @@ function start()
         flush(stdout)
     end
 
-    # The daily report's timer. Safe to call whatever the settings say: with
-    # LDGR_NO_DIGEST=1 it starts nothing, and with email off every beat returns
-    # at once without creating a folder. It re-reads notify.toml each minute, so
-    # switching email on does not need a restart. Any timer left running by an
-    # earlier include of this file in the same REPL is closed first.
+    # The daily report. Nothing here runs unless notify.toml names a mailbox.
+    #
+    # `preload` pulls the email package in now rather than at half past six, so
+    # the one thing that can be slow about sending happens while the operator is
+    # already waiting for the server to come up. Failing to load it is not fatal:
+    # the report is written to the outbox either way, and a message in the outbox
+    # goes out on a later attempt.
+    if Notify.enabled()
+        try
+            Notify.preload()
+        catch e
+            @warn "The email package could not be loaded. The daily report will stay in the outbox until it is." exception = e
+        end
+    end
+    # Safe to call whatever the settings say: it returns without doing anything
+    # when LDGR_NO_DIGEST=1 or there is no mailbox configured, and it creates no
+    # folders in that case.
     Notify.start_schedule!()
 
     # Set LDGR_NO_BROWSER=1 to suppress this during development.

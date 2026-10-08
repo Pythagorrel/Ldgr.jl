@@ -160,10 +160,28 @@ function build_ledger_rows(total_cash_eq, total_expense, total_deposit, total_rp
 end
 
 """
+    _amount(x) -> String or missing
+
+An amount as the ledger file writes it: plain digits with exactly two decimals.
+CSV.jl writes a Float64 the shortest way it can, which is `1.35e6` from a
+million up and `0.09999999999999998` for a sum of cents; QuickBooks is given
+neither. Rounded to the cent the way `Checks.money` rounds, so the file says
+what the form and the report say.
+"""
+_amount(x::Missing) = missing
+function _amount(x::Real)
+    cents = round(Int, x * 100)
+    whole, c = divrem(abs(cents), 100)
+    return (cents < 0 ? "-" : "") * string(whole) * "." * lpad(c, 2, '0')
+end
+
+"""
     write_ledger_csv(total_cash_eq, total_expense, total_deposit, total_rp, filepath)
 
-Unchanged from v2.1.1 apart from the docstring. Called twice per run now — once
-with a single day's amounts, once with the journal's column sums.
+Called twice per run — once with a single day's amounts, once with the journal's
+column sums. The rows are v2.1.1's; the amounts are written by `_amount`. Every
+row has a partner for the same amount, so the file still balances once rounded.
+Returns the rows with their amounts as numbers.
 """
 function write_ledger_csv(total_cash_eq, total_expense, total_deposit, total_rp, filepath::String;
                           day_variance::Float64=0.0, overnight_variance::Float64=0.0)
@@ -178,7 +196,10 @@ function write_ledger_csv(total_cash_eq, total_expense, total_deposit, total_rp,
         DataFrame(Account=String[], Debit=Union{Missing,Float64}[], Credit=Union{Missing,Float64}[]) :
         DataFrame(rows)
 
-    CSV.write(filepath, df)
+    out = DataFrame(Account=df.Account,
+                    Debit=Union{Missing,String}[_amount(x) for x in df.Debit],
+                    Credit=Union{Missing,String}[_amount(x) for x in df.Credit])
+    CSV.write(filepath, out)
     return df
 end
 

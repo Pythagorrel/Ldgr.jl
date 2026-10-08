@@ -1,7 +1,8 @@
 # ldgr — email settings.
 #
 # Copy this file to "notify.toml" beside it and fill it in. notify.toml is never
-# committed: it holds a password.
+# committed: it holds a Resend API key, which can send email in the clinic's
+# name.
 #
 # WITH NO notify.toml THE PROGRAM SIMPLY DOES NOT SEND EMAIL. Nothing else
 # changes — days are checked, saved and reported exactly as before, the record
@@ -9,12 +10,18 @@
 # in the Records folder, and the terminal says "Email : off (no notify.toml)"
 # when the server starts. That is the state a fresh copy is in.
 #
-# WHAT IS SENT, AND WHEN. One report a day, at the time given below, listing:
+# AN OLD notify.toml FROM THE GMAIL VERSION COUNTS AS NONE. One that has only
+# `smtp`, `user` and `password` in it has no `api_key`, so email is off and the
+# terminal says "Email : off (notify.toml has no Resend api_key)". Replace its
+# contents with the settings at the bottom of this file; the old lines are not
+# used any more.
+#
+# WHAT IS SENT. One report a day, listing:
 #   * the days that were entered, with any difference and the reason typed for
 #     it, and Off days named as Off days;
-#   * days already in the books that were changed on a later date, or changed
-#     while their ledger was still waiting — what moved, from what to what, who
-#     did it and when;
+#   * days already in the books that were changed on a later date, or after a
+#     report had gone out, or while their ledger was still waiting — what
+#     moved, from what to what, who did it and when;
 #   * a day that did not balance and now does;
 #   * gaps that were filled, and the ledgers that entering the missing day
 #     released, with any difference that turned up in the process;
@@ -22,52 +29,141 @@
 #     list is empty.
 #
 # A QUIET DAY STILL SENDS A SHORT "nothing to report" MESSAGE. That is on
-# purpose: it means silence is a signal. If no report arrives, either the
-# program was not running or these settings need attention.
+# purpose: it means silence is a signal. If no report arrives on a working day,
+# either ldgr was not opened that day or these settings need attention.
 #
-# IF THE PROGRAM WAS NOT RUNNING AT THE SEND TIME, the report is not lost. The
-# next time the server starts it notices, and sends ONE message covering the
-# whole missed period.
+# A DAY CORRECTED SOON AFTER IT WAS FIRST ENTERED IS NOT REPORTED. Staff may fix
+# what they typed until midnight or the send time, whichever comes first. A
+# correction made later is reported: on a later date, or after the send time,
+# once the owner has already been emailed the old figures. So is one made to a
+# day whose ledger nobody has seen yet.
 #
-# A DAY CORRECTED ON THE SAME DATE IT WAS FIRST ENTERED IS NOT REPORTED. Staff
-# may fix what they typed for as long as they are still on that day. It is a
-# correction made later, or one made to a day whose ledger nobody has seen yet,
-# that appears in the report.
+# WHEN IT IS SENT, AND WHO SENDS IT. The report goes out at `send_at` below —
+# half past five in the evening unless you change it. ldgr is usually closed by
+# then, so it does not send the report itself: an email service called Resend
+# does. While ldgr is open it hands the coming report to Resend with its send
+# time attached, and Resend sends it at that time even if ldgr has been closed
+# and the computer switched off. Every save hands over a fresh version and
+# cancels the one before it, so the version that goes out is the one that was
+# current when ldgr was closed. A day on which ldgr is opened but nothing is
+# saved still hands over a quiet report.
+#
+# A DAY TYPED AFTER THE SEND TIME IS IN THE NEXT DAY'S REPORT. So choose a send
+# time after the day is normally typed in.
+#
+# WHEN THE REPORT COULD NOT BE HANDED OVER IN TIME, nothing is lost. The next
+# time ldgr is open:
+#   * a day saved after the last version was handed over (the internet was down
+#     at that moment, or the save came in the last minute before the send time)
+#     goes out straight away in a CORRECTED report, which says it replaces the
+#     one sent at the send time;
+#   * a stretch no report covered at all (ldgr was closed or offline before it
+#     could hand the report over, or Resend refused it) goes out straight away
+#     as ONE LATE report for the whole stretch;
+#   * a stretch in which nothing was saved, such as a closed Sunday, is not sent
+#     on its own. The next report covers it too, and says it covers more than
+#     one day.
+# If ldgr is not opened at all between one send time and the next, nothing was
+# handed over, so nothing is sent. The watchdog (setup step 5) notices and
+# emails the owner.
+#
+# PROBLEMS ARE WRITTEN TO audit_log.txt in the Records folder, and to the
+# terminal, in one plain sentence saying what to fix. A missing connection is
+# tried again after five minutes. A key or an address Resend refuses is tried
+# again after an hour, or as soon as notify.toml is saved again. If
+# audit_log.txt says the secure connection to Resend could not be checked,
+# check that the computer's date and time are right and whether antivirus
+# software inspects secure (HTTPS) connections; as a last resort, the
+# JULIA_SSL_CA_ROOTS_PATH environment variable, set before ldgr starts, can
+# point at a certificate bundle that includes the antivirus's own root
+# certificate. This file is read again every minute, so a change needs no
+# restart.
+#
+# A DOMAIN OF THE CLINIC'S OWN, VERIFIED IN RESEND, IS NEEDED, and `from` must
+# be an address on it. Without `from` email stays off, and the terminal says
+# "Email : off (notify.toml has no from address)". There is no fallback sender:
+# Resend's shared testing sender, onboarding@resend.dev, sends only to the
+# address the Resend account was opened with, and on 29 September 2026 a
+# scheduled report from it was accepted and then failed at its send time with
+# "Domain is not verified", where nothing on this computer could see it. With a
+# verified domain the report can go to any address.
+#
+# SETTING IT UP, ONCE:
+#   1. Open a Resend account (resend.com). Then Domains → Add domain: add the
+#      DNS records Resend lists where the domain was bought, and wait until
+#      Resend shows the domain as verified.
+#   2. In Resend: API Keys → Create API key. Name it "ldgr" and give it
+#      FULL ACCESS. A "Sending access" key can hand a report over but almost
+#      certainly cannot cancel an earlier version, so the owner could get two
+#      reports for a day.
+#   3. Paste the key into `api_key` below, the owner's address into `to`, and
+#      an address on the verified domain into `from`. Start ldgr: the terminal should say "Email : on -> " and that address.
+#      Within a minute the coming report is handed over, and Resend's Emails
+#      page shows it waiting. If entries were saved before the last send time,
+#      one more report also goes out at once, covering all of them ("the first
+#      report since email was set up").
+#   4. In Resend: Webhooks → add a webhook. Its URL is the ping URL of the
+#      healthchecks.io check made in step 5 (make that first if you need the
+#      URL). Tick the event "email.delivered" and nothing else. Each report
+#      Resend delivers then tells healthchecks.io that it arrived.
+#   5. In healthchecks.io: add a check with a Cron schedule of "30 17 * * 1-6"
+#      (5:30 pm, Monday to Saturday), time zone America/Guyana, and a grace
+#      time of 1 to 2 hours. Add the owner's email address as an email
+#      integration, confirm it from the email healthchecks.io sends, and make
+#      sure it is switched on for this check. If a working day passes with no
+#      report delivered, healthchecks.io emails the owner. It never sees the
+#      report, only that one arrived.
+#        - A NEW CHECK DOES NOT WATCH UNTIL IT HAS BEEN PINGED ONCE. It shows as
+#          "new" until then and sends no alert, even if every report fails. So
+#          open the check's ping URL once in a browser, and see that the check
+#          shows as up.
+#        - For a holiday, pause the check. It resumes by itself with the next
+#          report.
+#        - If the clinic's working days change (it is thought to be closed on
+#          Sundays), edit the schedule. If `send_at` changes, change "30 17" to
+#          match, or the watchdog will raise false alarms.
+#   6. In the owner's Gmail, on a computer (filters cannot be made in the phone
+#      app): search for
+#          from:<the `from` address below> OR from:healthchecks.io
+#      then create a filter from that search: Never send it to Spam, Always
+#      mark it as important, Categorize as Primary. That keeps the report and
+#      the watchdog's alerts out of Spam and on the phone's notifications.
+#
+# THE FIRST TIME IT RUNS FOR REAL, CHECK TWO THINGS:
+#   * That an earlier version is cancelled. Save a day, then save it again with
+#     a figure changed: Resend's Emails page should show the first version as
+#     cancelled, and audit_log.txt should say "an earlier version of the report
+#     ... was cancelled". If it says the key "can only send" instead, the key is
+#     not a Full access key (step 2).
+#   * That the webhook reaches healthchecks.io. After the first report is
+#     delivered, the check should show a ping.
+# Both were confirmed on the developer's test on 29 September 2026.
+#
+# TO SEE BOTH KINDS OF SENDING WITHOUT WAITING A DAY: set `send_at` about a
+# quarter of an hour ahead, and start ldgr with the environment variable
+# LDGR_DIGEST_NOW=1 (in the Julia REPL: ENV["LDGR_DIGEST_NOW"] = "1" before
+# include("server.jl")). A report is sent at once, and the next one is handed to
+# Resend for the new send time. Close ldgr before then: Resend should still send
+# it on time, and healthchecks.io should show a ping for each report. Then set
+# `send_at` back, and start ldgr without LDGR_DIGEST_NOW from then on.
 
-# Where the report goes. The owner, or the clinic's own mailbox.
+# Where the report goes: the owner.
 to = "owner@example.com"
 
-# The address it comes FROM. Leave it out and it defaults to `user` below,
-# which is almost always what you want: Gmail and most other providers reject a
-# message whose sender is not the mailbox that signed in.
-from = "clinic@example.com"
+# The Resend API key from setup step 2 — a Full access key. It starts with
+# "re_". ldgr never prints it or writes it anywhere else.
+api_key = "re_xxxxxxxx"
 
-# The outgoing mail server. "smtps://" means the connection is encrypted from
-# the start, which is what port 465 expects; a server that wants STARTTLS on
-# port 587 is written "smtp://smtp.example.com:587".
-smtp = "smtps://smtp.gmail.com:465"
-
-# The mailbox to sign in as. The full address, not just the name in front of
-# the @.
-user = "clinic@example.com"
-
-# AN APP PASSWORD, NOT THE MAILBOX PASSWORD. Gmail refuses an ordinary password
-# from a program. To make one:
-#   1. Turn on 2-Step Verification for the mailbox — an app password cannot be
-#      created without it.
-#   2. Go to the Google Account for that mailbox, then Security, then
-#      App passwords.
-#   3. Name it "ldgr" and create it. Google shows a 16-character password once.
-#   4. Paste it here, spaces and all.
-# It can send mail as the clinic, so this file belongs on the clinic's machine
-# and nowhere else. It can be revoked on its own from the same page, without
-# changing the mailbox password.
-password = "xxxx xxxx xxxx xxxx"
+# Who the report says it is from: an address on the domain verified in setup
+# step 1. Required: without it email stays off (see above).
+from = "LDGR Daily Report <reports@example.com>"
 
 # Put in front of every subject line, so the reports thread and filter together.
+# Optional; this is what is used if it is left out.
 subject_prefix = "ldgr: "
 
 # When the report goes out, on a 24-hour clock, in the clinic's own time — the
-# machine's clock. "18:30" is half past six in the evening. Leave it out and
-# that is what is used.
-send_at = "18:30"
+# machine's clock. "17:30" is half past five in the evening. Optional: leave it
+# out and that is what is used. If you change it, change the healthchecks.io
+# schedule to match (setup step 5).
+send_at = "17:30"

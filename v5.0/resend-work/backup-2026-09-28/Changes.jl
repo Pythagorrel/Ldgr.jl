@@ -52,7 +52,7 @@ using ..Checks
 # added, never rewritten.
 # =============================================================================
 
-export after_save, rows_between, rows_checked, first_seen, first_saved_at, Row, COLUMNS
+export after_save, rows_between, first_seen, Row, COLUMNS
 
 """
     COLUMNS
@@ -98,10 +98,7 @@ place the two vocabularies meet.
   was_day_diff    what the day difference was before this save (edits only)
   was_night_diff  the same for the night difference
   changed         which figures moved, and from what to what (edits only)
-  cross_day_edit  an edit made after the session of the day's first save had
-                  ended: on a later calendar date, or after the send time that
-                  followed the first save (`_session_over`; the column keeps
-                  its first name)
+  cross_day_edit  an edit made on a later calendar date than the first save
   pending_day     the day's ledger had not been made when it was edited
   now_balances    this save cleared a difference the day used to carry
   filled_a_gap    the day after this one was already on record
@@ -145,13 +142,6 @@ Append the rows describing one save, and return how many were written.
             passed rather than looked up a second time — and, more importantly,
             looking them up NOW would give the wrong answer, because this save
             has already changed them.
-  send_at   the daily report's send time, which ends a day's free-correction
-            session if midnight has not ended it first (`_session_over`).
-            Neither front door passes it: `Notify` registers its setting in
-            `SEND_TIME` when it loads. `nothing` leaves midnight as the only
-            end, which is what the tests that run on the real clock pass.
-  at        the moment of the save; `nothing` means now. Only the tests pass
-            it, to save at a fixed time.
 
 ONE ROW PER FACT. The saved day gets a row, and so does each held ledger that
 this save released, because a released day belongs to a different date, carries
@@ -169,9 +159,7 @@ function after_save(outcome; rec::DayRecord,
                     # `ctx` is the same three facts under the name `day_context`
                     # gives them. Accepted so that either spelling works at the
                     # call site and neither front door has to translate.
-                    ctx = nothing,
-                    send_at::Union{Nothing,Time} = _registered_send_time(),
-                    at::Union{Nothing,DateTime} = nothing)
+                    ctx = nothing)
     try
         outcome.ok || return 0
 
@@ -180,20 +168,19 @@ function after_save(outcome; rec::DayRecord,
             error("after_save was given no `before` facts, so the flags cannot be worked out.")
 
         who = get(ENV, "USERNAME", get(ENV, "USER", "unknown"))
-        t   = at === nothing ? now() : at
+        t   = now()
         edited = outcome.journal == "replaced"
 
-        # THE ORDER HERE MATTERS: `first_saved_at` must be asked before this
-        # save's own row is appended, or every edit would find itself and
-        # conclude it was first saved just now.
+        # THE ORDER HERE MATTERS: `first_seen` must be asked before this save's
+        # own row is appended, or every edit would find itself and conclude it
+        # was first saved today.
         #
         # A day with no history in the log counts as one saved before the log
         # existed, so its first edit is reported. That is the conservative way
         # round: the first week of reports may name a few old days, which is
         # noise, where the other way round would hide a real edit, which is the
         # thing this file was built for.
-        cross = facts.in_books &&
-                (fs = first_saved_at(rec.date); fs === nothing || _session_over(fs, t, send_at))
+        cross = facts.in_books && (fs = first_seen(rec.date); fs === nothing || fs < Dates.today())
 
         # A ledger that has not been made yet means nobody has seen this day
         # posted, so an edit to it is worth reporting even on the day it was
@@ -287,19 +274,11 @@ function _changed_text(previous, rec::DayRecord)
         push!(parts, "Night reason \"$(previous.opening_reason)\" -> \"$(rec.opening_reason)\"")
     end
     if previous.status != rec.status
-        push!(parts, "Kind of day $(kind_words(previous.status)) -> $(kind_words(rec.status))")
+        push!(parts, "Kind of day $(previous.status) -> $(rec.status)")
     end
 
     return join(parts, "; ")
 end
-
-"""
-A kind of day as the form names it: "Work day" or "Off day". The log's `kind`
-column keeps the stored words ("trading" / "closed"), but anything a person
-reads — the `changed` cell included — uses these. A value that is neither stays
-as it is.
-"""
-kind_words(v::AbstractString) = v == STATUS_TRADING ? "Work day" : v == STATUS_CLOSED ? "Off day" : String(v)
 
 "Two money figures that are the same as far as this program is concerned: both
 blank, or within half a cent of each other (Checks.MONEY_TOL)."
@@ -379,193 +358,50 @@ same writer is for there to be one.
 function _write(path::AbstractString, rows::Vector{Row})
     isempty(rows) && return 0
     mkpath(dirname(path))
-    existed = isfile(path) && !_blank(path)
-    existed && _mend_tail!(path)
+    existed = isfile(path)
     CSV.write(path, _frame(rows); append = existed, header = !existed)
     return length(rows)
-end
-
-"""
-    _mend_tail!(path)
-
-Make sure the next row appended to the log starts on a line of its own.
-
-A WRITE CUT SHORT — a power cut, a full disk, a hand edit — can leave the last
-line unfinished, and the next save would be appended onto it: the two would read
-back as one damaged line and this save would vanish from every report. So:
-
-  * a last line cut inside a quoted cell (the file ends with a quoted cell
-    still open, judged the way CSV.jl reads it — see `_ends_in_quote`) has its
-    quote closed first, or the open quote would run on through the next row
-    and make the whole file unreadable;
-  * a last line with no newline gets one.
-
-Either way the damaged line stays on its own, where the reader names it, and
-this row is written whole on the next line.
-"""
-function _mend_tail!(path::AbstractString)
-    bytes = read(path)
-    if _ends_in_quote(bytes)
-        open(io -> write(io, "\"\n"), path, "a")
-    elseif isempty(bytes) || last(bytes) != UInt8('\n')
-        open(io -> write(io, "\n"), path, "a")
-    end
-    return nothing
-end
-
-"""
-    _ends_in_quote(bytes) -> Bool
-
-Does the file end inside a quoted cell, as CSV.jl would read it? A `"` opens a
-quoted cell at the start of a cell, AND AFTER ANY SPACES OR TABS THAT BEGIN IT:
-CSV.jl, read with the options `_parse` uses, takes ` "a,b"` (and the same after a
-tab, or after several spaces) as a quoted cell, so a line cut as
-`..., "a reason, cut` is cut inside one and needs its quote closed. Inside a
-quoted cell, `""` is a quote and a lone `"` closes it; spaces after the closing
-quote, before the comma, are allowed (`"abc" ,x` reads as `abc` and `x`).
-Anywhere else a `"` is an ordinary character — so a quote typed into the middle
-of a cell by hand (`5" drawer`, or `ab "x,y"`, where something other than a space
-comes first) is not mistaken for a cut. Walking the raw bytes is safe for UTF-8:
-no byte of a multi-byte character is a quote, a comma, a space, a tab or a line
-end.
-"""
-function _ends_in_quote(bytes::AbstractVector{UInt8})
-    q = UInt8('"')
-    sep(b) = b == UInt8(',') || b == UInt8('\n') || b == UInt8('\r')
-    pad(b) = b == UInt8(' ') || b == UInt8('\t')
-    # :start   nothing in the cell yet
-    # :lead    only spaces or tabs so far (a quote here still opens a quoted cell)
-    # :bare    an ordinary cell, in which a quote is just a character
-    # :quoted  inside a quoted cell
-    # :closing a quote just seen inside a quoted cell: `""`, or the end of it
-    st = :start
-    for b in bytes
-        if st === :start || st === :lead
-            st = b == q ? :quoted : sep(b) ? :start : pad(b) ? :lead : :bare
-        elseif st === :bare
-            sep(b) && (st = :start)
-        elseif st === :quoted
-            b == q && (st = :closing)
-        else
-            st = b == q ? :quoted : sep(b) ? :start : :bare
-        end
-    end
-    return st === :quoted
-end
-
-"""
-    _header_line() -> String
-
-The heading line as the writer writes it (CSV.jl, from an empty table): the
-nineteen names, comma-separated, no quotes, one line feed. Taken from the writer
-itself so that it can never drift from what a fresh log begins with.
-"""
-_header_line() = sprint(io -> CSV.write(io, _frame(Row[])))
-
-"""
-Does this text, from a small file with its byte-order mark and trailing blanks
-already off, hold no data? It does if it is empty, or if it is only the START OF
-THE HEADING LINE with no line break inside it (`when,who,wha`).
-"""
-_no_data(t::AbstractString) =
-    isempty(t) || (!occursin(r"[\r\n]", t) && startswith(_header_line(), t))
-
-"""
-A log that holds no data, so that it is written afresh, with its header: an
-empty file; one holding nothing but blanks or the byte-order mark a spreadsheet
-writes when a sheet is emptied — which is what a person emptying the file to
-mend it may leave; or one holding only the START OF THE HEADING LINE, with no
-line break inside it (`when,who,wha`): the very first write, cut short by a power
-cut or a full disk. Appended to, such a file would put the first row under a
-broken or missing heading, or have it taken for the heading itself, and nothing
-would read again — every report would say the change log could not be read, for
-good.
-
-Only that is treated as empty. A heading damaged any other way (a wrong name, a
-column missing, a second line) may sit above rows somebody wants, so it is left
-alone, and the reader names it.
-"""
-function _blank(path::AbstractString)
-    n = filesize(path)
-    n == 0 && return true
-    n <= ncodeunits(_header_line()) + 64 || return false
-    return _no_data(rstrip(lstrip(read(path, String), '\ufeff')))
 end
 
 _append!(rows::Vector{Row}) = _write(Layout.change_log_path(), rows)
 
 """
-    Skipped
+    _rows_from(df) -> Vector{Row}
 
-A row of the log that could not be read: its row number (the first row under
-the header is row 1) and, when that much of it survives, the moment it was
-written. `when` is `nothing` when even that cell is unreadable, and such a row
-could belong to any report.
-"""
-const Skipped = NamedTuple{(:row, :when), Tuple{Int, Union{Nothing,DateTime}}}
-
-"""
-    _rows_from(df) -> (rows, skipped, problem)
-
-An already-read table back as rows, with the rows that could not be read and a
-plain sentence when the table as a whole could not be read.
+An already-read table back as rows.
 
 A LINE THAT CANNOT BE READ IS SKIPPED, NOT THROWN. This file is appended to by
 a program that must never fail a save, which means a half-written last line is
 possible after a power cut; and it is a file a person may open and save from a
 spreadsheet. Either way, one unreadable line must not cost the owner the whole
-report. One warning is raised in the terminal, once — the report reads this
-file every minute, and a line repeated every minute in a terminal nobody is
-watching is no more informative than one.
-
-BUT A SKIPPED LINE IS NEVER SILENT. The warning goes to a terminal nobody
-watches; `skipped` and `problem` go into the report, so a log that could not be
-read can never come out the other end as "nothing to report" (see
-`rows_checked`).
+report. One warning is raised for the batch — twenty identical lines in a
+terminal nobody is watching are no more informative than one.
 """
 function _rows_from(df::DataFrame)
     out = Row[]
-    skipped = Skipped[]
     have = Set(names(df))
     for c in COLUMNS
         if !(c in have)
             @warn "The change log does not have the column \"$c\", so it was not read." maxlog = 1
-            return (out, skipped, "The change log has no \"$c\" column, so none of it could be read.")
+            return out
         end
     end
-    # Columns beyond the nineteen appear only when some line has too many
-    # cells — two rows run together on one line, because the first was cut
-    # short with no newline before the second was appended. Such a line may
-    # hold a LATER row than its own `when` says, so it is dated nowhere and
-    # counts against every report until somebody mends the file.
-    extra = [c for c in names(df) if !(c in COLUMNS)]
+    warned = false
     for i in 1:nrow(df)
         try
             push!(out, _row_at(df, i))
         catch e
-            joined = any(c -> !ismissing(df[i, c]), extra)
-            push!(skipped, Skipped((i, joined ? nothing : _when_at(df, i))))
-            @warn "A line of the change log could not be read and was skipped." exception = e maxlog = 1
+            if !warned
+                @warn "A line of the change log could not be read and was skipped." exception = e
+                warned = true
+            end
         end
     end
-    return (out, skipped, "")
-end
-
-"The moment an unreadable row was written, if that one cell can still be read."
-function _when_at(df::DataFrame, i::Int)
-    try
-        return _dt(_text(df[i, "when"]))
-    catch
-        return nothing
-    end
+    return out
 end
 
 function _row_at(df::DataFrame, i::Int)
     g(c) = _text(df[i, c])
-    # A released row is always written with the day that released it; one
-    # without is a line cut short in its last cell.
-    g("what") == "released" && isempty(strip(g("released by"))) &&
-        throw(ArgumentError("a released row with no \"released by\" day"))
     return Row((_dt(g("when")), g("who"), g("what"), _date(g("day")), g("day kind"),
                 g("journal"), g("ledger"),
                 _num(g("day difference")), _num(g("night difference")),
@@ -579,121 +415,30 @@ end
 
 # `missing` is what CSV.jl hands back for an empty cell. Every one of these is
 # the inverse of the matching `_*_text` above.
-"""
-A cell as text. Bytes that are not valid UTF-8 — a line saved from a spreadsheet
-in the wrong encoding — become the replacement character, so that no reader of
-the log (the report, the state file) is ever handed an invalid string.
-"""
-function _text(v)
-    (v === missing || v === nothing) && return ""
-    t = String(v)
-    return isvalid(t) ? t : String(map(c -> isvalid(c) ? c : '\ufffd', t))
-end
+_text(v) = (v === missing || v === nothing) ? "" : String(v)
 _num(s::AbstractString)  = (t = strip(s); isempty(t) ? NaN : parse(Float64, t))
-"""
-A flag is always written as the word true or false (`_cells`), so anything
-else — a blank, or half a word — means the line was cut short or edited by
-hand. Throwing makes `_rows_from` skip the row and `rows_checked` report it,
-instead of reading a torn line as a day with no difference and no flags.
-TRUE/FALSE, as a spreadsheet saves them, still read.
-"""
-function _bool(s::AbstractString)
-    t = lowercase(strip(s))
-    t == "true"  && return true
-    t == "false" && return false
-    throw(ArgumentError("expected true or false, found $(repr(s))"))
-end
-# Julia's own parsers accept a date cut short ("2026-09-2" reads as 2
-# September, "2026" as 1 January), which would date a torn line in some other
-# report's stretch. So the full shape is required first.
-const _DATE_SHAPE = r"^\d{4}-\d{2}-\d{2}$"
-const _DT_SHAPE   = r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$"
-function _date(s::AbstractString)
-    t = strip(s)
-    occursin(_DATE_SHAPE, t) || throw(ArgumentError("expected a date as yyyy-mm-dd, found $(repr(s))"))
-    return Date(t)
-end
-function _dt(s::AbstractString)
-    t = strip(s)
-    occursin(_DT_SHAPE, t) || throw(ArgumentError("expected yyyy-mm-dd HH:MM:SS, found $(repr(s))"))
-    return DateTime(t, dateformat"yyyy-mm-dd HH:MM:SS")
-end
-_maybe_date(s::AbstractString) = (t = strip(s); isempty(t) ? nothing : _date(t))
-
-"""
-    _read_log_checked() -> (rows, skipped, problem)
-
-The whole log, oldest first, with what could not be read of it.
-
-An absent file is an empty list and no problem: that is a records folder
-nothing has been saved into yet, which is a perfectly ordinary state and the
-honest answer is "nothing has happened". A file that is there but cannot be
-opened or parsed is the opposite — an empty list AND a problem — because the
-honest answer then is "something may have happened and this program cannot
-say what".
-"""
-function _read_log_checked()
-    p = Layout.change_log_path()
-    isfile(p) || return (Row[], Skipped[], "")
-    bytes = try
-        read(p)
-    catch e
-        @warn "The change log could not be opened, so this report may be incomplete." file = p exception = e maxlog = 1
-        return (Row[], Skipped[], "The change log could not be opened ($(_brief(e))).")
-    end
-    df = try
-        _parse(bytes)
-    catch e
-        @warn "The change log could not be read, so this report may be incomplete." file = p exception = e maxlog = 1
-        return (Row[], Skipped[], "A line of the change log is damaged (for example a quotation mark " *
-                                  "that is never closed), so none of it could be read.")
-    end
-    return _rows_from(df)
-end
-
-"""
-    _parse(bytes) -> DataFrame
-
-The log's bytes as a table of text. Every option here closes a way a damaged
-line used to cost more than itself:
-
-  * THE BYTES, NOT THE PATH. Given a path, CSV.jl maps the file into memory and
-    on Windows lets go of it only when parsing succeeds; after a failure the
-    file stayed locked until a chance garbage collection, and a mended copy
-    could not be saved over it while ldgr ran.
-  * THE DELIMITER IS FIXED. Left to guess, CSV.jl looks at the first few lines,
-    and one damaged line among them can make it choose the colon of the clock
-    times, so that nothing reads at all.
-  * A TYPE FOR EACH NAMED COLUMN, not one type for all. A line with too many
-    cells makes CSV.jl add columns part-way through; given one type for every
-    column it sizes the new ones from its first guess at the row count and
-    writes past their end — reading back garbage, or bringing the process
-    down. Named types leave the extra columns to CSV.jl's own sizing.
-  * `validate = false`, so a log missing one of the named columns still reads
-    and is reported as such (`_rows_from`) rather than throwing here.
-  * CSV.jl's warnings about short and long lines are silenced: the report reads
-    the log every minute and says what is wrong in the report itself.
-"""
-_parse(bytes::Vector{UInt8}) =
-    CSV.read(bytes, DataFrame; types = Dict(c => String for c in COLUMNS), validate = false,
-             delim = ',', missingstring = "", silencewarnings = true)
+_bool(s::AbstractString) = lowercase(strip(s)) == "true"
+_date(s::AbstractString) = Date(strip(s))
+_dt(s::AbstractString)   = DateTime(strip(s), dateformat"yyyy-mm-dd HH:MM:SS")
+_maybe_date(s::AbstractString) = (t = strip(s); isempty(t) ? nothing : Date(t))
 
 """
     _read_log() -> Vector{Row}
 
-The whole log, oldest first, for the callers that only need the rows that could
-be read (`rows_between`, `first_seen`). Unchanged in behaviour: what could not
-be read is warned about and left out.
+The whole log, oldest first. An absent file is an empty list rather than an
+error: that is a records folder nothing has been saved into yet, which is a
+perfectly ordinary state and the honest answer is "nothing has happened".
 """
-_read_log() = first(_read_log_checked())
-
-"""
-The first line of an error, cut short. It goes into a report the owner reads,
-where the whole of a parser's complaint would be noise.
-"""
-function _brief(e)
-    text = strip(first(split(sprint(showerror, e), '\n')))
-    return length(text) > 160 ? first(text, 157) * "..." : String(text)
+function _read_log()
+    p = Layout.change_log_path()
+    isfile(p) || return Row[]
+    df = try
+        CSV.read(p, DataFrame; types = String, missingstring = "")
+    catch e
+        @warn "The change log could not be read, so this report may be incomplete." file = p exception = e
+        return Row[]
+    end
+    return _rows_from(df)
 end
 
 # ---------------------------------------------------------------------------
@@ -708,144 +453,42 @@ were written. `from === nothing` means "from the beginning", which is what the
 very first report asks for.
 
 HALF-OPEN AT THE START, CLOSED AT THE END, so that consecutive reports tile the
-timeline exactly: a row written at precisely 5:30:00 pm belongs to the report
-that closes at 5:30 pm and not to the one that opens there. Without that rule a
+timeline exactly: a row written at precisely 6:30:00 pm belongs to the report
+that closes at 6:30 pm and not to the one that opens there. Without that rule a
 save landing on the second would be reported twice or not at all, and the answer
 would depend on which.
 """
 function rows_between(from::Union{Nothing,DateTime}, to::DateTime)
     rows = _read_log()
-    return filter(r -> _inside(r.when, from, to), rows)
-end
-
-"After `from` (or from the beginning) and up to and including `to`."
-_inside(t::DateTime, from::Union{Nothing,DateTime}, to::DateTime) =
-    t <= to && (from === nothing || t > from)
-
-"""
-    rows_checked(from, to) -> (rows, problem)
-
-`rows_between`, and a plain sentence saying what could not be read, or `""`
-when everything could.
-
-THIS IS WHAT THE DAILY REPORT READS, and the reason it exists is that the
-report must never give a false all-clear. `rows_between` answers an unreadable
-log with an empty list, which is indistinguishable from a quiet day — and a
-quiet day is exactly what the report would then say. With a problem in hand the
-report says the log could not be read instead.
-
-A SKIPPED ROW COUNTS AGAINST THIS WINDOW ONLY IF IT COULD BELONG TO IT: when its
-`when` cell can still be read and falls outside the window, it is some other
-report's business, and flagging it here would make one torn line from a power
-cut shout in every report for the rest of time. A row whose `when` cannot be
-read could belong to any window, so it counts against all of them until
-somebody mends the file — and so does a line holding two rows run together,
-whose second row could be from any later day (see `_rows_from`).
-"""
-function rows_checked(from::Union{Nothing,DateTime}, to::DateTime)
-    rows, skipped, problem = _read_log_checked()
-    inside = filter(r -> _inside(r.when, from, to), rows)
-    isempty(problem) || return (inside, problem)
-    bad = filter(s -> s.when === nothing || _inside(s.when, from, to), skipped)
-    isempty(bad) && return (inside, "")
-    # Counted as a person opening the file counts: the heading is line 1.
-    problem = length(bad) == 1 ?
-        "Line $(bad[1].row + 1) of Change Log.csv (counting the heading as line 1) could not be " *
-        "read and was left out." :
-        "$(length(bad)) lines of Change Log.csv could not be read and were left out (the first " *
-        "is line $(bad[1].row + 1), counting the heading as line 1)."
-    return (inside, problem)
-end
-
-"""
-    first_saved_at(d) -> DateTime or nothing
-
-The moment this business day first appeared in the log, or `nothing` when it is
-not in the log at all.
-
-WHAT IT IS FOR: the owner's rule is that figures may be corrected freely while
-the day is still being counted and that a correction made later is worth
-reporting (`_session_over`). This is the moment they were typed. It is read from
-the log rather than from the books because the books do not carry it — that is
-the whole reason this file exists.
-
-AN "edited" ROW COUNTS AS A FIRST SIGHTING. A day saved before this log existed
-has no "saved" row anywhere, and its first appearance here is an edit; treating
-that edit as the first sighting would then make every later edit look
-same-session and silent. Counting it means such a day is reported once more than
-strictly necessary, which is the right way to be wrong.
-"""
-function first_saved_at(d::Date)
-    best = nothing
-    for r in _read_log()
-        r.day == d || continue
-        (r.what == "saved" || r.what == "edited") || continue
-        (best === nothing || r.when < best) && (best = r.when)
-    end
-    return best
+    return filter(r -> r.when <= to && (from === nothing || r.when > from), rows)
 end
 
 """
     first_seen(d) -> Date or nothing
 
-The calendar date of `first_saved_at(d)`: the date the report gives as the one
-a day was first saved on.
+The calendar date on which this business day first appeared in the log, or
+`nothing` when it is not in the log at all.
+
+WHAT IT IS FOR: the owner's rule is that figures may be corrected freely on the
+day they were typed and that a correction made later is worth reporting. This is
+the "day they were typed". It is read from the log rather than from the books
+because the books do not carry it — that is the whole reason this file exists.
+
+AN "edited" ROW COUNTS AS A FIRST SIGHTING. A day saved before this log existed
+has no "saved" row anywhere, and its first appearance here is an edit; treating
+that edit as the first sighting would then make every later edit look
+same-day and silent. Counting it means such a day is reported once more than
+strictly necessary, which is the right way to be wrong.
 """
-first_seen(d::Date) = (t = first_saved_at(d)) === nothing ? nothing : Date(t)
-
-"""
-    _session_over(first, t, send_at) -> Bool
-
-Whether an edit made at `t` came after the session in which the day was first
-saved (at `first`) had ended — that is, whether the owner's rules report it.
-
-A SESSION ENDS AT MIDNIGHT OR AT THE SEND TIME, WHICHEVER COMES FIRST. Staff may
-correct a day freely while they are still counting it. An edit on a later date
-is reported, because revisiting a day whose cash was already counted is worth
-the owner's eye. So is an edit made after the send time that followed the first
-save: by then the owner has been emailed the old figures, and a correction left
-out would leave them believing figures that no longer stand. A shortage put
-right at 6 pm, after the 5:30 pm report, was the case that showed it. The send
-time alone would not do: a day typed after it and changed the next morning
-would then fall in one session, and a next-morning edit is exactly the kind the
-owner wants to see.
-
-TO THE SECOND, like the reports. The log stamps rows to the second and a row at
-5:30:00 belongs to the 5:30 pm report, so an edit stamped 5:30:00 is in the same
-report as a first save before it, and free. `send_at = nothing` leaves midnight
-as the only end.
-"""
-function _session_over(first::DateTime, t::DateTime, send_at::Union{Nothing,Time})
-    t = floor(t, Second)
-    Date(t) > Date(first) && return true
-    send_at === nothing && return false
-    cut = DateTime(Date(first), send_at)
-    return first <= cut < t
-end
-
-"""
-    SEND_TIME
-
-Where the change log gets the daily report's send time: a function of no
-arguments that returns a `Time`, or `nothing` while none is set. `Notify` sets
-it when it loads, because the send time is its setting (`notify.toml`) and it is
-loaded after this module; the server and the command line both load it, so
-neither passes the send time to `after_save` itself.
-"""
-const SEND_TIME = Ref{Any}(nothing)
-
-"The send time `SEND_TIME` gives, or `nothing` if none is set or asking fails —
-then only midnight ends a session. Never throws: it runs as `after_save`'s
-default, before that function's own `try`."
-function _registered_send_time()
-    f = SEND_TIME[]
-    f === nothing && return nothing
-    try
-        t = f()
-        return t isa Time ? t : nothing
-    catch
-        return nothing
+function first_seen(d::Date)
+    best = nothing
+    for r in _read_log()
+        r.day == d || continue
+        (r.what == "saved" || r.what == "edited") || continue
+        seen = Date(r.when)
+        (best === nothing || seen < best) && (best = seen)
     end
+    return best
 end
 
 """
@@ -865,7 +508,7 @@ function warmup_roundtrip(path::AbstractString)
                   "added", "written", 0.0, 0.0, "", "", NaN, NaN, "",
                   false, false, false, false, nothing))
     _write(path, Row[sample])
-    _rows_from(_parse(read(path)))
+    _rows_from(CSV.read(path, DataFrame; types = String, missingstring = ""))
     return nothing
 end
 

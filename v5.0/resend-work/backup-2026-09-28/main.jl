@@ -119,13 +119,10 @@ function process_day(rec::DayRecord; force::Bool=false, echo::Bool=true,
     # first time the day is saved. Re-saving a day that is already in the books
     # asks nothing, because the answer was given and audited when it went in;
     # the date is still the first day on record, which is what `first_day`
-    # carries to the checks and to the ledger gate below. An Off day is never
-    # asked: it has no balance of its own, so it is not the starting point.
+    # carries to the checks and to the ledger gate below.
     recorded, next_recorded = Chain.on_record(rec.date, rec.date + Day(1))
     first_day = Chain.is_genesis_date(rec.date)
-    genesis   = first_day && !recorded && !is_closed(rec)
-    # The Work day a gap filled here releases, past any saved Off days (L3-E).
-    next_work = next_recorded ? Chain.next_work_day(rec.date) : nothing
+    genesis   = first_day && !recorded
 
     # A closed day has no counted figures, so it has no variances — it simply
     # carries the balance through. Computing one would compare a pass-through
@@ -147,8 +144,7 @@ function process_day(rec::DayRecord; force::Bool=false, echo::Bool=true,
                              is_genesis    = first_day,
                              ledger_exists = isfile(daily_ledger_path(rec.date)),
                              in_books      = recorded,
-                             next_in_books = next_work !== nothing,
-                             next_date     = something(next_work, rec.date + Day(1)))
+                             next_in_books = next_recorded)
 
         # STOP — refuse before anything is written.
         if has_stops(findings)
@@ -292,9 +288,7 @@ daily ledgers refuse to overwrite (there is no operator at a terminal to answer
 a prompt, so the warning became a policy), monthly ledgers always overwrite
 (they are derived, and rewriting them every run is what stops them drifting).
 What v4.0 adds is that the refusal now has a name the operator sees — L3-B — and
-the replacement is recorded rather than merely acted on. (The entry form now
-asks for a replacement on every save, so there `force` is not a per-save
-confirmation; the log line only says that a replacement was requested.)
+the confirmation is recorded rather than merely acted on.
 """
 function _write_daily_ledger!(session, rec::DayRecord, dv::Float64, ov::Float64,
                               ready::Bool, force::Bool, echo::Bool)
@@ -324,7 +318,7 @@ function _write_daily_ledger!(session, rec::DayRecord, dv::Float64, ov::Float64,
     write_ledger_csv(day_cash, day_expense, day_deposit, day_rp, dlpath;
                      day_variance=dv, overnight_variance=ov)
     log_event(session, overwriting ?
-        "OVERWROTE daily ledger $(basename(dlpath)) — replacement was requested" :
+        "OVERWROTE daily ledger $(basename(dlpath)) — operator confirmed re-import is safe" :
         "wrote daily ledger $(basename(dlpath))"; echo=echo)
     return overwriting ? "overwritten" : "written"
 end

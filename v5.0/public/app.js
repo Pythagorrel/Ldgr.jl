@@ -9,15 +9,27 @@
    replaceable without touching anything else.
 
    WHERE THE DATA LIVES: not here. Saving sends the day to the server, which
-   checks it again and writes it straight to the books; a saved day is read
-   back from the server when someone asks to edit it. This page holds no
-   record it cannot re-fetch, so closing the tab loses nothing that was saved.
+   checks it again and writes it straight to the books, and makes the day's
+   ledger file again every time. This page holds no record it cannot re-fetch,
+   so closing the tab loses nothing that was saved.
 
-   THE TWO ACTIONS: Save (/api/save) writes the day and stays on it. Next day
+   THE TWO ACTIONS: Save (/api/save) writes the day and stays on it; that it
+   worked is said by the Checks panel ("Day saved, ledger generated", or the
+   grey note "This day has been saved."), and only when the panel is out of
+   sight, or the server has something to add, by a line under the buttons. Next day
    (/api/next) writes nothing; it asks the server whether the day on screen is
    already in the books, exactly as shown, and only then moves the form on to
    the date the server names. Whether the day may be left is the server's
    answer, never this page's guess.
+
+   A SAVED DAY COMES BACK BY ITSELF: whenever the form lands on a date (opening
+   the page, picking a date, Next day), the server is asked for that date
+   (/api/day). A date already in the books comes up as it was saved: its
+   figures and reasons, or the Off day switch on for an Off day. Any other date
+   comes up blank. The owner chose this on 2026-10-07. Clear still blanks the
+   form and keeps the date; after Clear on a saved day, and only then, the quiet
+   "Show saved figures" link under the Checks list (or Ctrl+Alt+Z) brings the
+   day back. It is not a check and is never counted as one.
 
    WHAT IS BUILT HERE: index.html is a fixed shell. The fields, the rows of the
    Checks panel and the dock's explanation row are made in this file with
@@ -37,16 +49,17 @@ const CLOSED_NOTE = "No ledger will be generated. The next working day carries t
 
 const state = {
   config:    null,        // groups + labels, from /api/config
-  editing:   null,        // date string of a saved day loaded back with "Edit that day", or null
   today:     null,
   findings:  [],          // last findings from the server, so the list can re-render without a request
   day:       null,        // what the last check said about the date itself: {date, genesis, hasDailyLedger, inBooks}
   touched:   new Set(),   // drawer-count keys the person has left (blur) at least once for this form, or loaded with a saved day
   saveTried: false,       // Save pressed for this form
   checkedFor: null,       // the figures the findings on screen were checked against, as JSON
+  checkAnswered: false,   // a check has answered (or failed) for this form since it was last reset
   selected:  null,        // finding whose full explanation is open in the dock, by findingKey()
-  notice:    null,        // what the last save did, kept for the banner: {date, text}
   dockMsgDate: null,      // the date the message under the buttons is about, or null
+  loadMsgDate: null,      // the date the sentence about a failed look-up is about, or null
+  clearedDate: null,      // the date Clear blanked, for "Show saved figures"; null once anything else starts the form again or the day is saved
 };
 
 const $  = (id) => document.getElementById(id);
@@ -97,13 +110,12 @@ async function api(path, opts = {}) {
                       { status: res.status, data });
 }
 
-function banner(where, kind, text, actionLabel, actionFn) {
+function banner(where, kind, text) {
   const host = $(where);
   host.replaceChildren();
   if (!text) return;
   const div = el("div", "banner " + kind);
   div.appendChild(el("span", "", text));
-  if (actionLabel) div.appendChild(button("btn-ghost mini", actionLabel, actionFn));
   host.appendChild(div);
 }
 
@@ -251,6 +263,7 @@ function flushRedraw() {
 function pressEnded() {
   pressing = false;
   setTimeout(flushRedraw, 0);          // after the click this press produces
+  setTimeout(() => { swallowClick = false; }, 0);   // likewise: the click comes first, if there is one
 }
 
 /* ---------------------------------------------------------------------------
@@ -319,47 +332,70 @@ function validateDate() {
   err.textContent = msg;
   err.classList.toggle("show", msg !== "");
 
-  // An edit belongs to the date it was loaded for. Once another date is
-  // picked, the banner has to say what saving would do to THAT date.
-  if (state.editing && state.editing !== currentDate()) {
-    state.editing = null;
-    $("btn-cancel-edit").hidden = true;
-  }
   // What the last check said about the date belongs to that date alone.
   if (state.day && state.day.date !== currentDate()) setDayFacts(null);
   // So does the answer Next day gave: it named a date, and another date is
   // now on screen. A figure being typed does not take it down — a day that was
   // never saved is still unsaved while it is being corrected.
   if (state.dockMsgDate && state.dockMsgDate !== currentDate()) dockMessage();
+  // And the sentence about a failed look-up belongs to the date it was about.
+  if (state.loadMsgDate && state.loadMsgDate !== currentDate()) loadMessage();
 
-  resumeBanner();
+  clearBanner();
   updateButtons();
   return msg === "";
 }
 
-// The first day on record is showing its box and the box is not ticked yet.
-const needsGenesisTick = () => !$("genesis-line").hidden && !$("chk-genesis").checked;
+// The first day on record is showing its box and the box is not ticked yet. An
+// Off day is never the starting point, so its box is greyed out and never needed.
+const needsGenesisTick = () => !$("genesis-line").hidden && !$("chk-closed").checked &&
+                               !$("chk-genesis").checked;
 
+/* What the server's last check said stands in the way of a save: a Must fix,
+   or a difference whose own reason box is still blank. Judged on every finding
+   the server returned, not only the rows the panel is showing. A blank drawer
+   count the person has not reached yet is still a Must fix, and a difference
+   in a box the cursor is still in still needs its reason; the panel holds
+   those rows back (isTodo), the button does not. */
+function serverBlocks() {
+  if ($("chk-closed").checked) return false;          // an Off day sends no figures
+  // Nothing has been heard about this form yet (just reset, or just switched
+  // back to a Work day): not saveable until the server has looked at it. A
+  // check that could not be sent or answered counts as heard, so a server that
+  // is down still gets reported by the save that follows.
+  if (!state.checkAnswered) return true;
+  return state.findings.some(f =>
+    f.level === 1 ||
+    (f.level === 2 && $(reasonFor(f).input).value.trim() === ""));
+}
+
+/* Save is green only while the day is in a state the server would save. The
+   owner settled this on 2026-10-06: a green button that is refused when
+   pressed, or that works on an empty form, says the wrong thing. The server
+   still makes the decision that counts; this copy exists so the button greys
+   out rather than the save failing (Warnings Guide §8). */
 function formValid() {
-  // v4.0: a Level 2 difference cannot be saved until its reason is typed. The
-  // server enforces this too and that copy is the one that counts; this exists
-  // so the button greys out rather than the save failing (Warnings Guide §8).
+  // v4.0: a Level 2 difference cannot be saved until its reason is typed.
   if (emptyReason()) return false;
   // The first day on record has nothing to check its opening balance against,
   // so it is accepted once, deliberately, by ticking its box. Same idea: the
   // server refuses the day without it, and the button greys out first.
   if (needsGenesisTick()) return false;
   if (dateProblem() !== "") return false;
+  // Whatever the last check found: a Must fix (a blank drawer count, more cash
+  // out than there was, and the rest), or a difference with no reason yet.
+  if (serverBlocks()) return false;
   // A closed day sends no figures, so a half-typed figure now hidden behind the
   // Closed toggle must not stop it being saved.
   if ($("chk-closed").checked) return true;
   return !formInputs().some(i => i.classList.contains("invalid"));
 }
 
-/* Save is the one action the form can rule out for itself: a Level 2 with no
-   reason, an unticked first day, a bad date or a red box. Next day is not.
-   It is greyed out only while there is no usable date to ask about, and while
-   a save or a move is already on its way; whether the day may be left is the
+/* Save is greyed out whenever the day cannot be saved as it stands: a Must fix
+   or a difference with no reason in the server's last answer, an unticked
+   first day, a bad date or a red box. Next day is not judged here. It is
+   greyed out only while there is no usable date to ask about, and while a
+   save or a move is already on its way; whether the day may be left is the
    server's answer (POST /api/next), not a guess made here. */
 function updateButtons() {
   $("btn-save").disabled = !formValid();
@@ -378,17 +414,34 @@ function fillDateSelects(iso) {
       ySel.add(new Option(y, y));
     }
     MONTHS.forEach((name, i) => mSel.add(new Option(name, i + 1)));
-    [ySel, mSel].forEach(s => s.addEventListener("change", () => {
-      fillDays(); validateDate(); loadPrior(); scheduleCheck();
-    }));
-    dSel.addEventListener("change", () => { validateDate(); loadPrior(); scheduleCheck(); });
+    [ySel, mSel].forEach(s => s.addEventListener("change", () => { fillDays(); onDateChange(); }));
+    dSel.addEventListener("change", onDateChange);
   }
 
   const target = iso || state.today;
-  const [yy, mm, dd] = target.split("-").map(Number);
-  ySel.value = yy;
-  mSel.value = mm;
-  fillDays(dd);
+  // Already on that date (Clear, a load, or the person's own pick): the lists
+  // are left alone, so one being stepped through with the arrow keys is not
+  // rebuilt under the cursor.
+  if (currentDate() !== target) {
+    const [yy, mm, dd] = target.split("-").map(Number);
+    ySel.value = yy;
+    mSel.value = mm;
+    fillDays(dd);
+  }
+  dateShown = currentDate();
+}
+
+/* Another date is another day. Picking one starts the form again on that date:
+   the figures, both reasons, the Off day switch, the first-day tick, the Checks
+   panel and anything said under the buttons all described the day that was on
+   screen. (Until 2026-10-06 the figures were kept, so a saved day's figures and
+   its checks stayed on screen under whatever date was picked next.) A date that
+   is already in the books then comes up as it was saved; any other date stays
+   blank, exactly as Clear leaves it (openDate). */
+let dateShown = null;     // the date the form is on, to tell a real change of date
+function onDateChange() {
+  if (currentDate() === dateShown) return;
+  openDate(currentDate());
 }
 
 // Rebuild the day list for the chosen month, so 31 September is never offered
@@ -481,30 +534,36 @@ function refreshTotals() {
    Loading or clearing the form — one way to do it.
 
    Every path that puts a new day in front of the person comes through here:
-   startup, Next day, Clear, Cancel edit and Edit that day. Before this
-   existed each of those reset a different part of the form, so a reason typed
-   for one day was saved again with the next, an edited closed day reopened as
-   a trading day, and the warnings on screen described figures that were no
-   longer there.
+   startup, Next day, Clear, picking another date, and a saved day coming up
+   (openDate). Before this existed each of those reset a different part of the
+   form, so a reason typed for one day was saved again with the next, an edited
+   closed day reopened as a trading day, and the warnings on screen described
+   figures that were no longer there.
 
-   `day` is a saved day from /api/day. Without one the form is blank, on
-   `date` if given and on today otherwise.
+   `day` is a saved day as /api/day returns it. Without one the form is blank,
+   on `date` if given and on today otherwise. `check: false` leaves the check
+   to the caller: openDate runs it once it knows whether the date is saved, so
+   a blank form is not checked a moment before the saved day replaces it.
 --------------------------------------------------------------------------- */
-function resetForm(day = null, { date } = {}) {
+function resetForm(day = null, { date, check = true } = {}) {
   // Everything on screen described the old figures. Drop the pending check,
   // ignore any answer still on its way, and start the Checks panel from
   // nothing. This happens before the new figures go in, because an empty
   // Checks list also empties the reason boxes.
   clearTimeout(checkTimer);
   checkSeq++;
+  formSeq++;                           // and a saved day, or a save's own check, still on its way is let go
   pageFocused = null;
   state.touched.clear();
   state.saveTried = false;
   state.selected = null;
   state.checkedFor = null;
+  state.checkAnswered = false;         // Save stays grey until the check below answers
+  state.clearedDate = null;            // Clear sets it again itself (onClear)
   renderChecks([]);
   $("predicted").hidden = true;
   dockMessage();                       // whatever Next day last answered was about the old day
+  loadMessage();                       // and a failed look-up's sentence was about the old form
 
   const closed = !!day && day.status === "closed";
   fillDateSelects(day ? day.date : (date || state.today));
@@ -520,7 +579,6 @@ function resetForm(day = null, { date } = {}) {
   $("chk-closed").checked = closed;
   // A tick is consent for one save of one day. It never carries over.
   $("chk-genesis").checked = false;
-  $("chk-force").checked = false;
 
   setChecksSheet(false);
   applyClosedState();
@@ -528,7 +586,65 @@ function resetForm(day = null, { date } = {}) {
   refreshTotals();
   updateButtons();
   loadPrior();
-  return runCheck();
+  if (check) return runCheck();
+}
+
+/* Put the form on a date, as it is in the books. The form goes blank at once,
+   so nothing typed for the old date can be saved under the new one while the
+   server is asked. Then a date that is already in the books comes up as it was
+   saved: a Work day with its figures and reasons, an Off day with the switch on
+   and every box blank (resetForm says why). A date that is not in the books
+   stays blank. Either way the check runs once, on what ends up on screen.
+
+   The saved day is put in only if nothing has happened to the form meanwhile:
+   another date, Clear or Next day start it again (resetForm), and a figure
+   typed or the Off day switch moved is the person's own start on the form, which
+   is kept. If the server cannot be asked, the form stays blank and says so in
+   one sentence under the grey notes in the Checks panel (loadMessage).
+
+   `cursor` is for Next day: back to the top, with the cursor in the opening
+   balance, as the page put it there. */
+let formSeq = 0;          // numbers each fresh start of the form (resetForm), so an answer meant for an earlier one is let go
+async function openDate(date, { cursor = false } = {}) {
+  resetForm(null, { date, check: false });
+  const seq = formSeq;
+  if (cursor) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    const first = document.querySelector("#slot-opening input");
+    if (first) { pageFocused = first; first.focus({ preventScroll: true }); }
+  }
+  const sigAtStart = formSig();
+  let day = null;
+  if (dateProblem() === "") {
+    try {
+      const res = await api("/api/day?date=" + encodeURIComponent(date));
+      day = res.day || null;
+    } catch (e) {
+      if (seq === formSeq && currentDate() === date) {
+        loadMessage(`Could not look up ${prettyDate(date)}. ${e.message}`);
+      }
+    }
+  }
+  // The form was started again meanwhile, and that start ran its own check.
+  if (seq !== formSeq) return;
+  if (day && currentDate() === date && formSig() === sigAtStart) showSaved(day);
+  else runCheck();
+}
+
+/* Put a saved day on screen. On an Off day the boxes are hidden, so a cursor
+   left in one is taken out first, as the page's own doing: the box was not
+   visited, and its blank count must not be warned about early if the day is
+   switched back to a Work day (isTodo). On a Work day a cursor the page put in
+   the opening balance stays the page's. */
+function showSaved(day) {
+  const active = document.activeElement;
+  if (day.status === "closed" && active && formInputs().includes(active)) {
+    pageFocused = active;
+    active.blur();
+  }
+  const byPage = pageFocused;
+  resetForm(day);
+  if (byPage && document.activeElement === byPage) pageFocused = byPage;
 }
 
 /* ---------------------------------------------------------------------------
@@ -554,11 +670,14 @@ function resetForm(day = null, { date } = {}) {
 
    The one choice made here is about TIMING, not severity. A blank drawer
    count nobody has reached yet is left out of the Checks panel, so the page
-   does not alarm on the first figure typed. It is still a Stop and the server
-   still refuses the day; its row appears as soon as the box is left blank or
-   Save is pressed. A difference in a drawer count, with its reason box, waits
-   for the same moment, so nobody is asked for a reason while still typing the
-   figure. So does the deficit line under the closing balance (showPredicted).
+   does not alarm on the first figure typed. It is still a Stop: Save is grey
+   while it stands (serverBlocks), and its row appears as soon as the box is
+   left blank. A difference in a drawer count, with its reason box, waits for
+   the same moment, so nobody is asked for a reason while still typing the
+   figure; Save is grey until that reason is typed. So does the deficit line
+   under the closing balance (showPredicted). A row held back this way also
+   appears when a press of Save runs into it, which can only happen in the
+   moment between the last keystroke and the check's answer (saveDay).
 --------------------------------------------------------------------------- */
 
 /* The two reason boxes. A day can have two differences that need a reason, and
@@ -774,6 +893,8 @@ function renderDockNote(f) {
   icon.setAttribute("aria-hidden", "true");
   const close = button("note-close", "×", closeExplanation);
   close.setAttribute("aria-label", "Close this explanation");
+  close.title = "Close (Esc)";
+  close.setAttribute("aria-keyshortcuts", "Escape");
 
   setLevelClass(note, f.level);
   note.replaceChildren(icon, el("p", "note-text", f.message), close);
@@ -867,13 +988,23 @@ async function runCheck() {
     const res = await api("/api/check", { method: "POST", body: JSON.stringify(body) });
     if (seq !== checkSeq) return;       // the form changed while this was on its way
     state.checkedFor = closed ? null : JSON.stringify(body.amounts);
+    state.checkAnswered = true;
     renderChecks(res.findings);
+    // "This day cannot be saved yet." answered a press that ran into a Must
+    // fix. Once a check finds no Must fix, Save is green again and the sentence
+    // would contradict it, so it goes.
+    if (!state.findings.some(f => f.level === 1)) clearStopBanner();
     setDayFacts({ date: body.date, genesis: !!res.genesis,
                   hasDailyLedger: !!res.hasDailyLedger, inBooks: !!res.inBooks });
     if (closed) $("predicted").hidden = true;
     else        showPredicted(res.predicted, res.available, res.paidOut);
   } catch (e) {
     // A failed check must never block typing. The server re-checks on save.
+    // The form has been heard about, even if nothing came back: Save follows
+    // the last findings, and a press reports a server that cannot be reached.
+    if (seq !== checkSeq) return;
+    state.checkAnswered = true;
+    updateButtons();
   }
 }
 
@@ -885,27 +1016,110 @@ function setDayFacts(facts) {
   const before = state.day;
   const sameDate = !!facts && !!before && facts.date === before.date;
   // A tick is consent for one date. It never carries over to another.
-  if (!sameDate) {
-    $("chk-genesis").checked = false;
-    $("chk-force").checked = false;
-  }
+  if (!sameDate) $("chk-genesis").checked = false;
   state.day = facts;
   renderDayFacts();
-  // The banner is redrawn only when "is this date already saved?" gets a new
-  // answer. Checks arrive after every pause in typing, and redrawing each time
-  // would wipe a message Save has just put up (a refusal, a request for a
+  // The banner is taken down only when "is this date already saved?" gets a new
+  // answer. Checks arrive after every pause in typing, and clearing it each
+  // time would wipe a message Save has just put up (a refusal, a request for a
   // reason) while the person is still acting on it.
-  if ((sameDate && before.inBooks) !== (!!facts && facts.inBooks)) resumeBanner();
+  if ((sameDate && before.inBooks) !== (!!facts && facts.inBooks)) clearBanner();
 }
 
-/* Each tick box appears only when it applies to the date on screen. A closed
-   day writes no ledger, so it has no ledger file to replace; its tick is kept
-   in case the day is switched back to a work day. */
+/* The first-day tick box and the grey notes in the Checks panel appear only when
+   they apply to the date on screen. The first note says a save will make the
+   day's ledger file again, so it shows only for a Work day that already has one.
+   The second says the day is saved for every other saved day: one whose ledger
+   waits on the day before, and an Off day, which has no ledger. On an Off day the first-day tick stays
+   in view but greyed out and unticked: an Off day has no balance of its own, so
+   it saves without becoming the starting point, and the first Work day after it
+   is asked instead. Switched back to a Work day, the tick works again. */
 function renderDayFacts() {
   const day = state.day && state.day.date === currentDate() ? state.day : null;
   $("genesis-line").hidden = !(day && day.genesis);
-  $("force-line").hidden   = !(day && day.hasDailyLedger) || $("chk-closed").checked;
+  const offDay = $("chk-closed").checked;
+  $("chk-genesis").disabled = offDay;
+  if (offDay) $("chk-genesis").checked = false;
+  $("genesis-line").classList.toggle("is-off", offDay);
+  $("checks-regen").hidden = !(day && day.hasDailyLedger) || offDay;
+  // Any other saved day, Off day included: nothing else in the panel would say
+  // it is saved. (An Off day whose date still has a ledger file from an earlier
+  // Work day save has "Day saved, ledger generated" saying so.)
+  $("checks-saved").hidden = !(day && day.inBooks && !day.hasDailyLedger);
+  // An Off day has no figures on screen, so its note is only "This day has been
+  // saved." (owner, 2026-10-07). Switched to a Work day, the whole note shows.
+  $("checks-saved-more").hidden = offDay;
+  // "Show saved figures" is only for a saved date that Clear has just blanked:
+  // anywhere else the saved day is already on screen, or there is none.
+  $("checks-load").hidden = !(day && day.inBooks && state.clearedDate === currentDate());
   updateButtons();
+}
+
+/* Clear: blank the form and keep the date. On a saved date the day can then be
+   brought back with "Show saved figures"; the link shows as soon as the last
+   check (or the one Clear runs) says the date is saved. */
+function onClear() {
+  resetForm(null, { date: currentDate() });
+  state.clearedDate = currentDate();
+  renderDayFacts();
+}
+
+/* The form as one string: Off day or not, and for a Work day the figures and
+   both reasons. openDate and "Show saved figures" compare it before and after
+   asking for a saved day, to tell whether the person has started on the form
+   meanwhile. */
+function formSig() {
+  if ($("chk-closed").checked) return JSON.stringify({ closed: true });
+  return JSON.stringify({ closed: false, amounts: readAmounts(), ...readReasons() });
+}
+
+/* The one sentence said when a date could not be looked up (openDate), or when
+   "Show saved figures" did not work. It sits under the grey notes and the link
+   in the Checks panel, never in the banner at the top. Below 1100 px it is only
+   seen through the Checks pill, which shows only when there is a row (the same
+   accepted narrow-window limit as the link itself).
+   Like the dock message it is about one date, and is taken down with no text,
+   when another date is chosen, when the form is reset, and when a save works. */
+function loadMessage(text) {
+  const msg = $("checks-load-msg");
+  msg.textContent = text || "";
+  msg.hidden = !text;
+  state.loadMsgDate = text ? currentDate() : null;
+}
+
+/* "Show saved figures" (or Ctrl+Alt+Z), after Clear on a saved day: put the
+   date on screen back as it is in the books. This replaces whatever has been
+   typed since, and that is what was asked for by pressing it. Nothing is
+   calculated here: the server's figures go in as sent, balances included, and
+   the checks run on them like on any form. Then, as after Next day, the page
+   goes to the top with the cursor in the opening balance (an Off day has no
+   box to be in). */
+let loadingSaved = false;
+async function onLoadSaved() {
+  if (loadingSaved || dateProblem() !== "") return;
+  const date = currentDate();
+  const seq = formSeq;
+  const sigAtPress = formSig();
+  loadingSaved = true;
+  loadMessage();
+  let res;
+  try {
+    res = await api("/api/day?date=" + encodeURIComponent(date));
+  } catch (e) {
+    if (currentDate() === date && formSeq === seq) loadMessage(e.message);
+    return;
+  } finally {
+    loadingSaved = false;
+  }
+  // Another date was chosen, the form was started again, or the boxes were
+  // changed, while this was on its way.
+  if (currentDate() !== date || formSeq !== seq || formSig() !== sigAtPress) return;
+  if (!res.day) { loadMessage(prettyDate(date) + " is not in the books."); return; }
+
+  showSaved(res.day);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  const first = document.querySelector("#slot-opening input");
+  if (first && !$("chk-closed").checked) { pageFocused = first; first.focus({ preventScroll: true }); }
 }
 
 /* The predicted closing balance, shown BESIDE the counted one and never in it.
@@ -996,11 +1210,69 @@ function toggleChecksSheet() {
   if (open) $("checks").scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
+/* Esc closes what is open, one thing at a time: a full explanation in the dock
+   first, exactly as its ✕ does (which also returns the cursor to its link),
+   otherwise the narrow-screen Checks sheet. The key's own action is suppressed
+   only when it closed something. */
 function onKeydown(e) {
-  if (e.key !== "Escape" || !$("checks").classList.contains("open")) return;
+  if (e.key !== "Escape") return;
+  if (!$("dock-note").hidden) {
+    e.preventDefault();
+    closeExplanation();
+    return;
+  }
+  if (!$("checks").classList.contains("open")) return;
   const wasInside = $("checks").contains(document.activeElement);
   setChecksSheet(false);
   if (wasInside) $("dock-status").focus();
+}
+
+/* ---------------------------------------------------------------------------
+   Keyboard shortcuts
+
+   Four, and only four: Ctrl+S saves, Ctrl+N goes to the next day, Ctrl+Alt+C
+   clears the day, and Ctrl+Alt+Z presses "Show saved figures" after a Clear.
+   Each acts exactly like pressing its button: a greyed-out Next day, or a link
+   that is not showing, does nothing; a greyed-out Save answers the key as it
+   answers a click, saying why it cannot save (pressGreySave). Otherwise the
+   button is focused first so the box
+   being typed in is left the way a mouse click would leave it (the amount is
+   tidied, the "left the box" rule runs), then the button is clicked. On a
+   narrow window the link sits in the closed Checks sheet; the key still
+   reaches it there.
+   The keys are matched on e.code, so the keyboard layout and AltGr do not
+   change them. The browser's own meaning for these keys (Save page as, New
+   window) is always suppressed. Nothing else is intercepted.
+   In an ordinary Chrome tab Ctrl+N belongs to the browser and never reaches
+   the page; in ldgr's --app window it does.
+--------------------------------------------------------------------------- */
+const SHORTCUTS = [
+  { code: "KeyS", alt: false, button: "btn-save" },
+  { code: "KeyN", alt: false, button: "btn-next" },
+  { code: "KeyC", alt: true,  button: "btn-clear" },
+  { code: "KeyZ", alt: true,  button: "checks-load" },
+];
+
+function onShortcut(e) {
+  if (!e.ctrlKey || e.metaKey || e.shiftKey) return;
+  // On Windows AltGr reports Ctrl and Alt together; that is a typed character
+  // on some layouts, never Ctrl+Alt+C or Ctrl+Alt+Z.
+  if (e.getModifierState && e.getModifierState("AltGraph")) return;
+  const hit = SHORTCUTS.find(s => s.code === e.code && s.alt === e.altKey);
+  if (!hit) return;
+  e.preventDefault();
+  if (e.repeat) return;
+  const btn = $(hit.button);
+  if (btn.disabled) {
+    // A greyed-out Save still answers the key, as it answers a click: it says
+    // why it is grey, or waits for the check of figures just typed. Nothing is
+    // ever sent from here that the check refuses.
+    if (hit.button === "btn-save") pressGreySave(false);
+    return;
+  }
+  if (btn.hidden) return;             // "Show saved figures" only after Clear on a saved day
+  btn.focus();
+  btn.click();
 }
 
 /* ---------------------------------------------------------------------------
@@ -1014,7 +1286,7 @@ function onKeydown(e) {
 let saving = false;       // a second click while a save is on its way does nothing
 let moving = false;       // ...and the same for Next day
 
-/* Returns the date that was saved, or false. */
+/* Returns {date, warnings} for the day that was saved, or false. */
 async function saveDay() {
   if (saving) return false;
   saving = true;
@@ -1026,25 +1298,24 @@ async function saveDay() {
     // is on screen before deciding anything.
     clearTimeout(checkTimer);
     state.saveTried = true;
+    const date = currentDate();
+    const seq = formSeq;
     await runCheck();
+    // Another date was picked, or the form was started again (Clear, or a saved
+    // day coming up), while that check was on its way. The day Save was pressed
+    // for is no longer on screen, so nothing is sent and nothing is said.
+    if (currentDate() !== date || formSeq !== seq) return false;
 
-    if (emptyReason()) {
-      askForReason();
-      return false;
-    }
-    if (needsGenesisTick()) {
-      askForGenesis();
-      return false;
-    }
-    if (!formValid()) {
-      banner("banner-area", "warn", "Fix what is marked in red before saving this day.");
-      return false;
-    }
+    // Save was green when it was pressed, and the check it just waited for
+    // says the day cannot be saved as it stands (the last figure typed made
+    // the day impossible, or revealed a drawer count left blank, or left a
+    // difference with no reason yet). The button greys out with that answer,
+    // and this press is answered as a press on the grey button is.
+    if (explainRefusal()) return false;
 
     // v4.0: a closed day sends no figures at all. The server carries the previous
     // balance through, because nobody counted the drawer on a day the clinic was
     // shut and a typed figure would be fiction.
-    const date = currentDate();
     const closed = $("chk-closed").checked;
     if (closed && !confirm(
           "Mark " + prettyDate(date) + " as CLOSED?\n\n" +
@@ -1054,14 +1325,17 @@ async function saveDay() {
       return false;
     }
 
-    // Saving writes the day straight to the books. A tick goes with it only
-    // while its box is showing, so one left behind a hidden box (an Off day
-    // has no ledger file to replace) is never sent.
+    // Saving writes the day straight to the books. The first-day tick goes with
+    // it only while its box is showing, so one left behind a hidden box is
+    // never sent.
     const payload = closed
       ? { date, status: "closed" }
       : { date, amounts: readAmounts(), ...readReasons() };
     payload.allowGenesis = !$("genesis-line").hidden && $("chk-genesis").checked;
-    payload.force        = !$("force-line").hidden && $("chk-force").checked;
+    // The owner decided on 2026-09-29 that saving always regenerates the day's
+    // ledger file. The explanation of "Day saved, ledger generated" tells staff
+    // how to keep QuickBooks free of a double import.
+    payload.force = true;
 
     let res;
     try {
@@ -1069,6 +1343,14 @@ async function saveDay() {
     } catch (e) {
       // The server's refusal is the one that counts. It sends the findings that
       // explain it (a Stop, or a difference with no reason), so show those too.
+      if (currentDate() !== date) {
+        // Another date was picked while the save was on its way. A save that
+        // failed is never kept quiet, but the sentence has to name its day,
+        // because that day is no longer the one on screen; and its findings
+        // describe figures that are not in the boxes any more.
+        banner("banner-area", "error", `${prettyDate(date)} was not saved. ${e.message}`);
+        return false;
+      }
       banner("banner-area", "error", e.message);
       if (e.data && Array.isArray(e.data.findings)) {
         // The banner is at the top of the page and the person is down at the
@@ -1092,24 +1374,105 @@ async function saveDay() {
     }
 
     // The books have changed, so what the last check said about this date no
-    // longer holds. The next check says it again.
+    // longer holds. The next check says it again. What is on screen is now what
+    // is saved, so there is nothing for "Show saved figures" to bring back, and
+    // a failed look-up of this date is old news. Only if the form Save was
+    // pressed for is still the one on screen: a Clear or another date picked
+    // while the save was on its way keeps its own link and sentence.
+    if (formSeq === seq) { state.clearedDate = null; loadMessage(); }
     setDayFacts(null);
-    state.editing = null;
-    $("btn-cancel-edit").hidden = true;
-    const saved = res.date || date;
-    // Anything the bookkeeping code warned about while saving, such as a ledger
-    // file left as it was, follows the confirmation.
+    // Anything the bookkeeping code warned about while saving follows the
+    // confirmation, which onSave() words once the re-check has said whether the
+    // Checks panel confirms the save itself.
     const warnings = (res.warnings || []).join(" ");
-    state.notice = { date: saved, text: `${prettyDate(saved)} saved to the books.` + (warnings ? " " + warnings : "") };
-    resumeBanner();
+    // Any refusal banner was about the figures just sent.
+    clearBanner();
     // The day is in the books now, so a refusal of Next day that said it was
     // not saved has stopped being true.
     dockMessage();
-    return saved;
+    return { date: res.date || date, warnings };
   } finally {
     saving = false;
     updateButtons();
   }
+}
+
+/* Why the day cannot be saved as it stands, said where the server would say
+   it, in the server's order: a Must fix first ("This day cannot be saved yet."
+   at the top, and the Must fix's own explanation in the dock, beside the
+   button), then a difference with no reason (the cursor in its reason box),
+   then the first-day box, then a box the form itself marked red. Nothing is
+   sent. Returns true when there was something to say.
+
+   Two presses end up here: a press on the green button whose own check found
+   one of these (saveDay), and a press on the GREY button (pressGreySave), which
+   cannot save and says why instead. Both count as "Save pressed", so a row the
+   panel was holding back until its box was left is shown now. */
+function explainRefusal() {
+  state.saveTried = true;
+  renderChecks(state.findings);
+  const stop = state.findings.find(f => f.level === 1);
+  if (stop && serverBlocks()) {
+    banner("banner-area", "error", STOP_SENTENCE);
+    state.selected = findingKey(stop); explainedFrom = null;
+    renderChecks(state.findings);
+    revealExplanation("nearest");
+    return true;
+  }
+  if (emptyReason()) {
+    askForReason();
+    return true;
+  }
+  if (needsGenesisTick()) {
+    askForGenesis();
+    return true;
+  }
+  if (!formValid()) {
+    banner("banner-area", "warn", "Fix what is marked in red before saving this day.");
+    return true;
+  }
+  return false;
+}
+
+/* A press on the grey Save button: a real click (Chrome still reports the
+   pointer going down on a disabled button, though never a click) or Ctrl+S.
+   It can never save. What it does is what the press used to do before the
+   button learned to grey out for the server's verdict: it shows why. A drawer
+   count left blank that the panel was holding back gets its row, a difference
+   gets its reason box, and the explanation opens beside the button.
+
+   One case is let through to a real press: the figures have changed since the
+   last check answered (or no check has answered yet), so the button is grey
+   for an answer that is out of date. Typing the closing balance and pressing
+   Ctrl+S at once is the normal keyboard flow, and it must not need a second
+   press half a second later. saveDay waits for a check of exactly what is on
+   screen before deciding, and never sends a day that check refuses. */
+let swallowClick = false;   // the click that ends a press already answered on the way down
+function pressGreySave(fromPointer) {
+  if (dateProblem() !== "") return;                    // the date's own message is already on screen
+  if ($("chk-closed").checked) {
+    // An Off day is never grey for the server's verdict; only the first-day
+    // box can grey it, and the press says so.
+    if (needsGenesisTick()) setTimeout(explainRefusal, 0);
+    return;
+  }
+  if (!state.checkAnswered || !checkedIsCurrent()) {
+    // Leave the box the way a press on the green button would.
+    const active = document.activeElement;
+    if (active && active !== document.body && active.blur) active.blur();
+    // A mouse press is answered as the pointer goes down. If the day is saved
+    // before the button is released, Save is green by then and the release
+    // would click it a second time, saving the day twice; that click is let
+    // go. The flag is cleared after the press ends (pressEnded), so a later,
+    // separate click is not lost.
+    swallowClick = !!fromPointer;             // a key press ends in no click
+    onSave();
+    return;
+  }
+  // After the press itself: the browser takes the focus off the box as the
+  // pointer goes down, and the cursor this puts in a reason box, or on the
+  // explanation, has to be put there afterwards.
+  setTimeout(explainRefusal, 0);
 }
 
 /* A day that needs a reason was about to be saved without one: put the cursor
@@ -1134,11 +1497,23 @@ function askForGenesis() {
    The form stays where it is on purpose, so the figures are still there beside
    the confirmation. The check is then run again straight away, because the
    books have just changed underneath it: the date is now saved, a ledger file
-   now exists for it, and the tick boxes and the banner have to say so. */
+   now exists for it, and the Checks panel and the first-day box have to say so.
+
+   The Checks panel is the confirmation ("Day saved, ledger generated", or the
+   grey note "This day has been saved." for a day whose ledger waits on the day
+   before and for an Off day), so a sentence is added under the buttons only
+   where the panel cannot say it: a window too narrow for the panel, or when the
+   server has a warning to pass on. */
 async function onSave() {
   const saved = await saveDay();
   if (!saved) return;
   await runCheck();
+  const day = state.day && state.day.date === saved.date ? state.day : null;
+  // On a narrow window the Checks panel is hidden, so it cannot confirm the save.
+  const panelShown = $("checks").offsetParent !== null;
+  const panelSays = day && (day.hasDailyLedger || day.inBooks);
+  if (currentDate() !== saved.date || (panelSays && !saved.warnings && panelShown)) return;
+  dockMessage("info", `${prettyDate(saved.date)} saved to the books.` + (saved.warnings ? " " + saved.warnings : ""));
 }
 
 /* Next day: move the form on to the day after this one.
@@ -1153,6 +1528,7 @@ async function onNextDay() {
   if (saving || moving) return;
   if (dateProblem() !== "") return;
   const date = currentDate();
+  const seq = formSeq;
   const closed = $("chk-closed").checked;
   const payload = closed
     ? { date, status: "closed" }
@@ -1166,13 +1542,18 @@ async function onNextDay() {
   } catch (e) {
     // The server's sentence, as it wrote it, under the button that was just
     // pressed rather than at the top of the page, which is off screen from
-    // there. Nothing was saved and nothing moved.
-    dockMessage("warn", e.message);
+    // there. Nothing was saved and nothing moved. It is about the date that was
+    // asked about, so it is not shown once another date has been picked.
+    if (currentDate() === date && formSeq === seq) dockMessage("warn", e.message);
     return;
   } finally {
     moving = false;
     updateButtons();
   }
+  // Another date was picked, or the form was started again (a saved day coming
+  // up after the press), while the answer was on its way: that stands, and the
+  // answer about the old form is let go.
+  if (currentDate() !== date || formSeq !== seq) return;
 
   // The day after today has not happened yet, so there is nowhere to go. Said
   // beside the button, for the same reason as the refusal above.
@@ -1181,64 +1562,26 @@ async function onNextDay() {
     return;
   }
 
-  resetForm(null, { date: res.next });
-  window.scrollTo({ top: 0, behavior: "smooth" });
-  // Ready for the next morning count. The page put the cursor here, so moving
-  // on without typing does not count as leaving the box blank.
-  const first = document.querySelector("#slot-opening input");
-  if (first) { pageFocused = first; first.focus({ preventScroll: true }); }
+  // Ready for the next morning count, or the next day as it was saved. The page
+  // puts the cursor in the opening balance, so moving on without typing does
+  // not count as leaving the box blank.
+  openDate(res.next, { cursor: true });
 }
 
-/* ---------------------------------------------------------------------------
-   Editing a day that is already in the books
---------------------------------------------------------------------------- */
-
-/* "Edit that day": load the saved day back into the form exactly as it was
-   saved, figures, counted balances, reason and all, so a mistake can be put
-   right without typing the whole day again. Saving it replaces the day in the
-   books. The balances are that date's own counts, loaded only because someone
-   asked to edit that date; nothing is pre-filled for a day being entered. */
-async function startEdit(iso) {
-  let res;
-  try {
-    res = await api("/api/day?date=" + encodeURIComponent(iso));
-  } catch (e) {
-    banner("banner-area", "error", e.message);
-    return;
-  }
-  if (!res.day) {
-    banner("banner-area", "error", `${prettyDate(iso)} is not in the books, so there is nothing to edit.`);
-    return;
-  }
-  state.editing = iso;
-  state.notice = null;
-  $("btn-cancel-edit").hidden = false;
-  resetForm(res.day);
-  banner("banner-area", "info", `Editing ${prettyDate(iso)}. Saving will replace it.`);
-  window.scrollTo({ top: 0 });
+/* Takes the top banner down. A refusal (red marks, a missing reason, an unticked
+   first-day box, a save error) is about the figures sent when it was raised, so
+   it goes when the date changes, when the answer to "is this date saved?"
+   changes, and when a save succeeds. Nothing stands there between times. */
+function clearBanner() {
+  banner("banner-area", "");
 }
 
-/* The standing banner, most important first:
-     1. while a saved day is being edited, the Editing banner stays put;
-     2. the date on screen is already in the books, so saving will replace it.
-        Right after that date was saved (saving today leaves the form on today)
-        this is said together with the confirmation, rather than as a warning;
-     3. what the last save did. */
-function resumeBanner() {
-  if (state.editing) return;
-  const iso = currentDate();
-  const day = dateProblem() === "" && state.day && state.day.date === iso ? state.day : null;
-  const notice = state.notice;
-  if (day && day.inBooks) {
-    const justSaved = !!notice && notice.date === iso;
-    banner("banner-area", justSaved ? "info" : "warn",
-      (justSaved ? notice.text : `${prettyDate(iso)} is already saved.`) + " Saving again will replace it.",
-      "Edit that day", () => startEdit(iso));
-  } else if (notice) {
-    banner("banner-area", "info", notice.text);
-  } else {
-    banner("banner-area", "");
-  }
+// The Must-fix refusal alone, whether a press ran into it here or the server
+// sent it; the other banners (a reason, the first-day box) are taken down at
+// the moments listed above, as before.
+const STOP_SENTENCE = "This day cannot be saved yet.";
+function clearStopBanner() {
+  if ($("banner-area").textContent.trim() === STOP_SENTENCE) clearBanner();
 }
 
 /* ---------------------------------------------------------------------------
@@ -1258,21 +1601,33 @@ function applyClosedState() {
     REASONS.forEach(r => { $(r.box).hidden = true; });
     $("predicted").hidden = true;
   }
-  renderDayFacts();          // an Off day has no ledger file to replace; also updates the buttons
+  renderDayFacts();          // an Off day has no ledger, so no regenerate note; also updates the buttons
 }
 
 function wireEvents() {
-  $("btn-save").onclick        = onSave;
-  $("btn-next").onclick        = onNextDay;
-  $("btn-clear").onclick       = () => resetForm(null, { date: currentDate() });     // keeps the chosen date
-  $("btn-cancel-edit").onclick = () => { state.editing = null; $("btn-cancel-edit").hidden = true; resetForm(); };
+  $("btn-save").onclick        = () => { if (swallowClick) { swallowClick = false; return; } onSave(); };
+  // The second click of a double-click is not a second press: a saved day now
+  // comes up in a few milliseconds, and the second click would move past it.
+  $("btn-next").onclick        = (e) => { if (e.detail > 1) return; onNextDay(); };
+  $("btn-clear").onclick       = onClear;          // keeps the chosen date, blank even when it is saved
+  $("checks-load").onclick     = onLoadSaved;
 
   // v4.0 listeners
-  $("chk-closed").addEventListener("change", () => { applyClosedState(); runCheck(); });
+  // Switching the kind of day makes the last findings describe the other kind,
+  // so Save waits for the check of this one; and a Must fix refusal was about
+  // the other kind of day too.
+  $("chk-closed").addEventListener("change", () => { state.checkAnswered = false; clearStopBanner(); applyClosedState(); runCheck(); });
+  // A click on the greyed-out Save. The button cannot take the click, but the
+  // pointer going down on it is still reported, so the press can be answered.
+  document.addEventListener("pointerdown", (e) => {
+    const btn = $("btn-save");
+    if (e.target === btn && btn.disabled) pressGreySave(true);
+  }, true);
   REASONS.forEach(r => $(r.input).addEventListener("input", updateButtons));   // Save becomes available once each reason is typed
   $("chk-genesis").addEventListener("change", updateButtons); // ...and once the first day on record is accepted
   $("dock-status").addEventListener("click", toggleChecksSheet);
   document.addEventListener("keydown", onKeydown);
+  document.addEventListener("keydown", onShortcut);
   document.addEventListener("pointerdown", () => { pressing = true; }, true);
   document.addEventListener("pointerup", pressEnded, true);
   document.addEventListener("pointercancel", pressEnded, true);
@@ -1292,7 +1647,7 @@ async function boot() {
 
   buildGroups();
   updateButtons();          // greyed out until there is a date
-  resetForm();
+  openDate(state.today);    // today, as saved if it already is
   wireEvents();
 }
 

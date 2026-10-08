@@ -146,17 +146,15 @@ function recorded_months()
 end
 
 # --- Notifications ---------------------------------------------------------
-# The email settings and the two small files that say how far the daily report
-# has got. The settings live beside the program (they describe the
-# installation, not the books); the two state files live under ROOT with the
-# books they are about, so a records folder can be copied to another machine
-# complete. There is no outbox any more: the report is handed straight to
-# Resend, which holds it until the send time (see Notify.jl).
+# The email settings and the queue of messages waiting to go out. The settings
+# live beside the program (they describe the installation, not the books); the
+# queue lives under ROOT with the books it is about, so a records folder can be
+# copied to another machine complete.
 
 """
     notify_config_path() -> String
 
-The email settings, `notify.toml`, beside the source files. Absent by default,
+The mailbox settings, `notify.toml`, beside the source files. Absent by default,
 and absent means email is simply off.
 
 `LDGR_NOTIFY_CONFIG` overrides it, exactly as `LEDGER_ROOT` overrides ROOT, so a
@@ -166,40 +164,39 @@ notify_config_path() = get(ENV, "LDGR_NOTIFY_CONFIG", joinpath(@__DIR__, "notify
 
 notifications_dir() = joinpath(ROOT, "Notifications")
 
+"Messages written but not yet sent. A message stays here until it has gone out."
+outbox_dir() = joinpath(notifications_dir(), "outbox")
+
+"Messages that have been sent. Kept rather than deleted: it is the only record
+that the owner was actually told."
+sent_dir() = joinpath(notifications_dir(), "sent")
+
 """
     digest_marker_path() -> String
 
-The one line that says how far the daily report has got: the cutoff up to which
-reports are known to be complete — handed to Resend and past their send time.
+The one line that says how far the daily report has got: the cutoff the last
+report covered.
 
 A FILE RATHER THAN SOMETHING HELD IN MEMORY, because the question it answers —
-"has today's report already gone out?" — has to survive the server being closed
-and started again, which is the ordinary case at the end of a day.
+"has the 6:30 pm report for today already gone out?" — has to survive the server
+being closed and started again, which is the ordinary case at the end of a day.
+It sits beside the queue it belongs to rather than at the top of ROOT: it is
+about the messages, not about the books.
 """
 digest_marker_path() = joinpath(notifications_dir(), "last report.txt")
 
 """
-    scheduled_state_path() -> String
+    notice_name(t, d, n=1) -> String
 
-`scheduled report.toml`: the version of the coming report that is waiting at
-Resend — its id, its send time, the stretch it covers, how many change-log rows
-it was built from — and any earlier versions still to be cancelled.
-
-It is what lets a server started at any hour pick up exactly where the last one
-left off: without it, a restart could not cancel the version it had already
-handed over, and the owner would get two.
+The filename of one queued message: when it was written, then which day it is
+about, so the folder sorts into the order things happened. `n` disambiguates two
+messages written in the same second about the same day.
 """
-scheduled_state_path() = joinpath(notifications_dir(), "scheduled report.toml")
+notice_name(t::DateTime, d::Date, n::Integer=1) =
+    "$(Dates.format(t, "yyyy-mm-dd HHMMSS")) $(iso_tag(d))$(n > 1 ? " ($n)" : "").txt"
 
-"""
-    temp_path(path) -> String
-
-The scratch name a small file is written under before it is moved into place, so
-the real file is always either the old version or the new one and never half of
-each. Named here, like every other path (README rule 2), and matched by the
-`*.tmp` line in `.gitignore`.
-"""
-temp_path(path::AbstractString) = String(path) * ".tmp"
+outbox_path(name::AbstractString) = joinpath(outbox_dir(), name)
+sent_path(name::AbstractString)   = joinpath(sent_dir(), name)
 
 """
     warmup_file() -> String

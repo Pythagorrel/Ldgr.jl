@@ -134,8 +134,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
    which drops hide-when-closed, so it is also hidden by id. */
 #view-entry.is-closed #prior-hint { display: none; }
 
-.muted { color: var(--ink-soft); font-size: 13px; }
-
 /* ---- focus: always visible for keyboard users ---- */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -173,7 +171,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-size: 17px;
   font-weight: 600;
   line-height: 1.3;
-  letter-spacing: -.012em;
+  letter-spacing: .06em;
 }
 .brand-sub { margin-top: 1px; font-size: 13px; line-height: 1.4; color: var(--ink-soft); }
 
@@ -593,6 +591,21 @@ input.invalid:focus { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(16
   list-style: none;
 }
 
+/* The grey note under the list: what saving this day again will do. It is not a
+   check, so it has no count and no level. It borrows the quiet grey panel of the
+   tick boxes (.checkline) and sits in the flow of the sidebar. */
+.checks-note {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--page);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+.checks-note[hidden] { display: none; }
+
 /* One warning: the row's own button (icon, title, level), then its
    "See full explanation" link. The hover and the tint of an open explanation
    belong to the whole row, so the link reads as part of it. */
@@ -634,7 +647,8 @@ input.invalid:focus { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(16
 }
 .check-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-.check-more {
+.check-more,
+.checks-load {
   display: block;
   width: fit-content;
   /* Its words line up with the title: 12px row padding + 18px icon + 10px gap,
@@ -654,8 +668,28 @@ input.invalid:focus { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(16
   text-underline-offset: 2px;
   cursor: pointer;
 }
-.check-more:hover { color: var(--accent-dk); text-decoration-thickness: 2px; }
-.check-more:focus-visible { outline-offset: 0; }
+.check-more:hover,
+.checks-load:hover { color: var(--accent-dk); text-decoration-thickness: 2px; }
+.check-more:focus-visible,
+.checks-load:focus-visible { outline-offset: 0; }
+
+/* "Show saved figures", under the grey notes, after Clear on a saved day. It is
+   the same quiet link as "See full explanation" but not part of any row, so it
+   sits at the panel's own edge, and it is not a check. The class's display would
+   beat the hidden attribute, so hidden is restated. The sentence under it is
+   plain small text in the notes' grey: it says why a date could not be looked up
+   or brought back, and it is not a warning. With no link above it, it keeps the
+   notes' own spacing. */
+.checks-load { margin: 6px 0 0 6px; padding: 4px; }
+.checks-load[hidden] { display: none; }
+.checks-load[hidden] + .checks-load-msg { margin-top: 8px; }
+.checks-load-msg {
+  margin: 2px 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+.checks-load-msg[hidden] { display: none; }
 
 .check-icon {
   display: block;
@@ -748,8 +782,8 @@ input.invalid:focus { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(16
 /* Small to look at, 40px to hit. */
 .note-close::after { content: ""; position: absolute; inset: -4px; }
 
-/* ---- tick boxes: only when a save needs one (the first day on record, or a
-   ledger file already made for the day), right above the buttons. Quiet until
+/* ---- tick box: only when a save needs one (the first day on record), right
+   above the buttons. Quiet until
    ticked, then tinted green so the choice reads at a glance. ---- */
 .checkline {
   display: flex;
@@ -774,7 +808,11 @@ input.invalid:focus { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(16
   accent-color: var(--accent);
   cursor: pointer;
 }
-.checkline .muted { display: block; margin-top: 2px; }
+/* On an Off day the first-day box stays in view, greyed out: an Off day is never
+   the starting point, so there is nothing to accept. */
+.checkline.is-off { cursor: default; color: var(--ink-soft); }
+.checkline.is-off:hover { border-color: var(--line); }
+.checkline.is-off input[type="checkbox"] { cursor: default; }
 
 /* ---- main row: totals, then the actions ---- */
 .dock-main {
@@ -815,7 +853,7 @@ input.invalid:focus { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(16
   white-space: nowrap;
 }
 
-/* Clear, Cancel edit (only while editing), Save and Next day. Save is the only
+/* Clear, Save and Next day. Save is the only
    filled button of the four, so the main action is obvious at a glance; Next
    day sits beside it as an outline. They wrap rather than shrink, so no row of
    buttons ever pushes the page sideways. */
@@ -940,15 +978,6 @@ button {
 }
 .btn-danger:hover:not(:disabled) { background: var(--danger-bg); border-color: rgba(166, 61, 64, .45); }
 
-.mini {
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 8px;
-  font-size: 12.5px;
-}
-/* Small to look at, 40px to hit. */
-.mini::after { content: ""; position: absolute; inset: -4px; }
-
 button:disabled,
 button:disabled:hover {
   opacity: .42;
@@ -986,7 +1015,6 @@ button:disabled:hover {
   mask: var(--lv-icon) center / contain no-repeat;
 }
 .banner span { flex: 1; min-width: 0; padding-block: 4px; }
-.banner > button { margin-left: auto; }
 .banner.info  { --lv: var(--accent); --lv-line: rgba(31, 111, 92, .18); --lv-icon: var(--i-info); background: rgba(232, 243, 238, .80); }
 .banner.warn  { --lv: var(--warn);   --lv-line: rgba(138, 98, 18, .24); --lv-icon: var(--i-warn); background: rgba(253, 244, 227, .84); }
 .banner.error { --lv: var(--danger); --lv-line: rgba(166, 61, 64, .24); --lv-icon: var(--i-stop); background: rgba(251, 237, 233, .86); color: var(--danger); }

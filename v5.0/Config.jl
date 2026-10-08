@@ -169,18 +169,15 @@ const IDENTITY_OUTFLOW_KEYS = vcat([c.key for c in expense],
 # petty cash balance continues to match the counted drawer. Without the posting,
 # QuickBooks silently drifts and nothing in it ever shows the gap.
 #
-# ⚠ NOT YET CONFIRMED. "Unidentified Income" is the candidate discussed, chosen
-# because it is a current asset and so holds a balance rather than clearing
-# itself to the P&L each period. Two open questions before this goes live:
-#   1. Is that account already in use for unidentified RECEIPTS? If so, a
-#      shortage and an unidentified receipt would net against each other and the
-#      balance-sheet review would show nothing.
-#   2. The direction reads backwards — a cash SHORTAGE increases an account
-#      called "Unidentified Income".
-# A dedicated "Cash Over/Short" current-asset account avoids both. Get the exact
-# string from a CSV export of the chart of accounts, not by typing what it ought
-# to be — two of the handful of strings checked so far were wrong (Handover §8).
-const CASH_OVER_SHORT_ACCOUNT = "Unidentified Income"
+# "Cash & Cash Equivalent:Temp Account" is the clinic's temp account, used
+# because a dedicated Cash Over/Short account could not be approved. It is a
+# current asset, so it holds a balance rather than clearing itself to the P&L
+# each period. Other entries may share it, so staff add a description to each
+# posting in QuickBooks; the daily report and the Daily Journal keep every
+# difference with its reason either way. Get the exact string from a CSV export
+# of the chart of accounts, not by typing what it ought to be — two of the
+# handful of strings checked so far were wrong (Handover §8).
+const CASH_OVER_SHORT_ACCOUNT = "Cash & Cash Equivalent:Temp Account"
 
 # --- Labels for the new columns ---------------------------------------------
 # LABEL_OF above is built from ALL_CATEGORIES only, so the cash book and

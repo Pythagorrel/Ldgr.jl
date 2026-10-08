@@ -44,7 +44,7 @@ using ..Journal
 # =============================================================================
 
 export prior_record, prior_day, is_genesis_date, ledger_ready, pending_ledgers,
-       waiting_ledgers, month_chain_check, on_record, saved_record
+       waiting_ledgers, month_chain_check, on_record, saved_record, next_work_day
 
 "How many month-files to search backwards before giving up. A year of closure is
 not a scenario worth supporting, and an unbounded loop over missing folders would
@@ -138,11 +138,30 @@ Requiring d − 1 means the program cannot make that mistake: with no Wednesday 
 declines to compute the comparison at all and holds the ledger instead. Note
 that this still involves no calendar and no notion of which days SHOULD exist —
 it only asks whether the date immediately before this one has a row.
+
+OFF DAYS PASS THE BALANCE THROUGH. When d − 1 is a saved Off day, the closing
+comes from the nearest earlier day that is not one, stepping back over Off days.
+An Off day typed into a gap was saved with nothing to carry (0.00), so its own
+row cannot be trusted; and a date with no row is not an Off day — it is the
+gap — so stepping back stops there and the answer is nothing, which holds the
+ledger until the gap is filled, as for any missing day. The date returned is
+still d − 1, so every message names the day before, as it always has.
 """
 function prior_day(d::Date)
-    p = prior_record(d)
-    p === nothing && return nothing
-    return p.date == d - Day(1) ? p : nothing
+    e = d - Day(1)
+    while true
+        p = journal_path(year(e), month(e))
+        isfile(p) || return nothing
+        df = read_journal(p)
+        i = findfirst(==(e), df[!, DATE_COL])
+        i === nothing && return nothing                  # no row for e: a gap
+        if STATUS_COL in names(df) && String(df[i, STATUS_COL]) == STATUS_CLOSED
+            e -= Day(1)                                  # an Off day: look past it
+            continue
+        end
+        hit = _latest_before(df, e + Day(1))             # e's row, with the closing checks
+        return hit === nothing ? nothing : (date = d - Day(1), closing = hit.closing)
+    end
 end
 
 """
@@ -184,14 +203,57 @@ end
 """
     is_genesis_date(d) -> Bool
 
-True when there is no record anywhere before `d`.
+True when nothing but Off days is on record before `d`.
 
 Distinguished from an ordinary gap because the two need opposite handling: a gap
 holds the ledger until the missing day arrives, whereas the first day ever has
 nothing to wait for and would be held forever. The chain has to start somewhere,
 and that start is an explicit, audited decision rather than a silent default.
+
+OFF DAYS DO NOT START IT. An Off day before the first Work day has no close to
+carry, so it is saved without being accepted as the starting point, and the
+first Work day after it is still the first day on record, asked to accept its
+opening balance as if the Off day were not there.
 """
-is_genesis_date(d::Date) = prior_record(d) === nothing
+function is_genesis_date(d::Date)
+    y, m = year(d), month(d)
+    for _ in 1:MAX_LOOKBACK_MONTHS
+        p = journal_path(y, m)
+        if isfile(p)
+            df = read_journal(p)
+            has_status = STATUS_COL in names(df)
+            for i in 1:nrow(df)
+                df[i, DATE_COL] < d || continue
+                has_status && String(df[i, STATUS_COL]) == STATUS_CLOSED && continue
+                return false
+            end
+        end
+        y, m = _prev_month(y, m)
+    end
+    return true
+end
+
+"""
+    next_work_day(d) -> Date or nothing
+
+The first saved Work day after `d`, stepping forward over saved Off days, or
+nothing when a date with no row comes first. It is the day a gap filled at `d`
+releases: an Off day in between passes the balance through and has no ledger
+of its own, so the notice for a gap names the Work day after it, never the Off
+day (Warnings Guide L3-E).
+"""
+function next_work_day(d::Date)
+    e = d + Day(1)
+    while true
+        p = journal_path(year(e), month(e))
+        isfile(p) || return nothing
+        df = read_journal(p)
+        i = findfirst(==(e), df[!, DATE_COL])
+        i === nothing && return nothing                  # no row for e
+        STATUS_COL in names(df) && String(df[i, STATUS_COL]) == STATUS_CLOSED || return e
+        e += Day(1)                                      # an Off day: look past it
+    end
+end
 
 """
     ledger_ready(rec) -> (ready::Bool, prior, genesis::Bool)

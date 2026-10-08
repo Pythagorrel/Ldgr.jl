@@ -154,24 +154,6 @@ ok("a Stop → 400 carrying findings",
 ok("and one of them is a Stop", any(f -> f.level == 1, b.findings))
 ok("nothing was written for it", !isfile(daily_ledger_path(D1)))
 
-# An Off day before the first Work day is saved, but it is not the starting
-# point: it has no balance of its own. The first Work day after it is still the
-# first day on record, asked to accept its opening balance (the save below).
-D0 = D1 - Day(1)
-r = post("/api/check", (date=string(D0), status="closed"))
-b = body_of(r)
-ok("an Off day with nothing before it: the first-day box is offered (the form greys it out)",
-   r.status == 200 && b.genesis === true)
-ok("but there is no first-day notice for it", !any(f -> f.code == "L3-D", b.findings))
-r = post("/api/save", (date=string(D0), status="closed"))
-ok("it saves without the first-day box", r.status == 200 && body_of(r).closed === true)
-r = post("/api/check", (date=string(D1), amounts=figures(o=1270.0, c=2270.0)))
-b = body_of(r)
-ok("the Work day after it is still the first day on record",
-   b.genesis === true && any(f -> f.code == "L3-D", b.findings))
-ok("and is not measured against the Off day, nor held for it",
-   !any(f -> f.code in ("L2-B", "L3-A"), b.findings))
-
 # ================================================================ a good save
 println("\nPOST /api/save — the first day, accepted")
 r = post("/api/save", (date=string(D1), amounts=figures(o=1270.0, c=2270.0), allowGenesis=true))
@@ -184,8 +166,6 @@ ok("added to the journal, ledger written",
 ok("not a closed day", b.closed === false)
 ok("the journal and the ledger are on disk",
    isfile(journal_path(2026, 4)) && isfile(daily_ledger_path(D1)))
-ok("with nothing posted to the Temp Account for the Off day before it",
-   isfile(daily_ledger_path(D1)) && !occursin(CASH_OVER_SHORT_ACCOUNT, read(daily_ledger_path(D1), String)))
 
 println("\nPOST /api/save — saving the same day again")
 r = post("/api/save", (date=string(D1), amounts=figures(o=1270.0, c=2270.0), allowGenesis=true))
@@ -401,38 +381,6 @@ ok("saving the gap day releases the day that was waiting",
 r = post("/api/check", (date=string(D5), amounts=figures(o=5000.0, c=6000.0)))
 ok("and the reminder is gone once this day is on record too",
    !any(f -> f.code == "L3-E", body_of(r).findings))
-
-# ============================================== an Off day typed into a gap
-# An Off day saved while the day before it is missing has nothing to carry and
-# is stored as 0.00. The Work day after it looks past it to the last day that is
-# not an Off day, so it waits for the gap like any other missing day instead of
-# measuring its opening against 0.00.
-println("\nAn Off day typed into a gap")
-G1, G2, G3, G4 = Date(2026, 6, 1), Date(2026, 6, 2), Date(2026, 6, 3), Date(2026, 6, 4)
-post("/api/save", (date=string(G1), amounts=figures(o=49000.0, c=50000.0), force=true))
-r = post("/api/save", (date=string(G3), status="closed", force=true))
-ok("an Off day saves while the day before it is missing", r.status == 200)
-r = post("/api/check", (date=string(G2), amounts=figures(o=50000.0, c=51000.0)))
-ok("with only that Off day after it on record, the gap gets no notice naming the Off day",
-   !any(f -> f.code == "L3-E", body_of(r).findings))
-r = post("/api/check", (date=string(G4), amounts=figures(o=51000.0, c=52000.0)))
-b = body_of(r)
-ok("the Work day after it is not measured against the Off day's 0.00",
-   !any(f -> f.code == "L2-B", b.findings))
-ok("its ledger waits on the gap instead", any(f -> f.code == "L3-A", b.findings))
-r = post("/api/save", (date=string(G4), amounts=figures(o=51000.0, c=52000.0), force=true))
-ok("it saves with no opening reason, its ledger held",
-   r.status == 200 && String(body_of(r).dailyLedger) == "held")
-r = post("/api/check", (date=string(G2), amounts=figures(o=50000.0, c=51000.0)))
-l3e = [f for f in body_of(r).findings if f.code == "L3-E"]
-ok("filling the gap now, the notice names the Work day waiting (4 June), not the Off day",
-   length(l3e) == 1 && occursin("4 June 2026", String(l3e[1].message)) &&
-   !occursin("3 June", String(l3e[1].message)))
-r = post("/api/save", (date=string(G2), amounts=figures(o=50000.0, c=51000.0), force=true))
-ok("filling the gap releases it",
-   r.status == 200 && string(G4) in [String(x) for x in body_of(r).released])
-ok("with no difference posted to the Temp Account",
-   isfile(daily_ledger_path(G4)) && !occursin(CASH_OVER_SHORT_ACCOUNT, read(daily_ledger_path(G4), String)))
 
 # =================================================================== warmup()
 # The whole design constraint: starting the server leaves the books untouched.

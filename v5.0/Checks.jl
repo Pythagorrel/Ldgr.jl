@@ -88,7 +88,7 @@ const FINDING_TITLES = Dict{String,String}(
     "L2-A" => "Day doesn't balance",
     "L2-B" => "Opening doesn't match last close",
     "L3-A" => "Ledger waiting on the day before",
-    "L3-B" => "Ledger already made for this day",
+    "L3-B" => "Day saved, ledger generated",
     "L3-C" => "Marked as closed",
     "L3-D" => "First day on record",
     "L3-E" => "Day after already on record",
@@ -511,7 +511,7 @@ end
 # ---------------------------------------------------------------------------
 """
     check_day(rec; prior_closing, prior_date, is_genesis, ledger_exists,
-                   in_books, next_in_books) -> Vector{Finding}
+                   in_books, next_in_books, next_date) -> Vector{Finding}
 
 Run every applicable check against one day and return everything found, sorted
 by severity.
@@ -520,14 +520,17 @@ by severity.
                   if there is no previous day (gap, or first day ever).
   prior_date      the date that closing came from, used only in messages so the
                   operator can see WHICH day is being compared against.
-  is_genesis      true when there is no record anywhere before this date, so it
-                  would be the very first day. Suppresses L3-A; raises L3-D
-                  while the day is not in the books yet.
+  is_genesis      true when nothing but Off days is on record before this date,
+                  so it would be the very first day. Suppresses L3-A; raises
+                  L3-D while a Work day is not in the books yet (an Off day is
+                  never the starting point).
   ledger_exists   true when a daily ledger file already exists for this date,
                   which means it may already be inside QuickBooks.
   in_books        true when this date already has a journal row.
-  next_in_books   true when the day AFTER this one already has a journal row,
-                  so this entry is filling a gap underneath it (L3-E).
+  next_in_books   true when a Work day after this one already has a journal row
+                  with only saved Off days in between, so this entry is filling
+                  a gap underneath it (L3-E).
+  next_date       that Work day, which L3-E names. Defaults to the day after.
 
 THE TWO "IS IT ON RECORD" FACTS ARE PASSED IN, NOT LOOKED UP. This module reads
 no files (see the header), so the caller hands it what the books say. Both
@@ -551,7 +554,8 @@ function check_day(rec::DayRecord;
                    is_genesis::Bool=false,
                    ledger_exists::Bool=false,
                    in_books::Bool=false,
-                   next_in_books::Bool=false)
+                   next_in_books::Bool=false,
+                   next_date::Date=rec.date + Day(1))
 
     findings = stop_checks(rec)
 
@@ -585,8 +589,9 @@ function check_day(rec::DayRecord;
             # and putting it again would ask the operator to re-authorise a
             # decision that is already recorded in the audit log. The date is
             # still the first day on record, which is why is_genesis stays true
-            # and L3-A below stays suppressed.
-            if !in_books
+            # and L3-A below stays suppressed. An Off day is never the starting
+            # point: it is saved without the question (Chain.is_genesis_date).
+            if !in_books && !is_closed(rec)
                 push!(findings, Finding("L3-D", LEVEL_NOTICE, :opening_balance,
                     "This is the first day on record, so there is nothing to check the opening " *
                     "balance against. It will be accepted as the starting point for every day " *
@@ -630,7 +635,7 @@ function check_day(rec::DayRecord;
         # refused day releases nothing.
         if next_in_books && !in_books
             push!(findings, Finding("L3-E", LEVEL_NOTICE, :closing_balance,
-                "$(spoken_date(rec.date + Day(1))) is already on record and was waiting on " *
+                "$(spoken_date(next_date)) is already on record and was waiting on " *
                 "this day. Check that its opening balance matches this closing balance. " *
                 "If they do not agree, that day will need an opening reason before its " *
                 "ledger can be made.", nothing))
@@ -638,15 +643,18 @@ function check_day(rec::DayRecord;
     end
 
     # --- L3-B: a ledger already exists for this date ------------------------
-    # QuickBooks does not check for duplicates, so a replacement imported on
-    # top of the original counts the day twice. ldgr cannot see inside
-    # QuickBooks, so this is the one decision only the operator can make. The
-    # answer is recorded rather than merely acted on.
+    # The form regenerates the day's ledger file on every save; the replace
+    # tick box was removed on 2026-09-29 at the owner's request. ldgr cannot
+    # see inside QuickBooks, so this notice tells staff how to keep a
+    # re-import from counting the day twice. The command line still needs
+    # --force to overwrite a daily ledger.
     if ledger_exists
         push!(findings, Finding("L3-B", LEVEL_NOTICE, nothing,
-            "A ledger has already been generated for $(spoken_date(rec.date)). If it was imported " *
-            "into QuickBooks, importing the replacement would count this day twice. " *
-            "Confirm it was never imported, or that the old import has been deleted.", nothing))
+            "A ledger has already been generated for $(spoken_date(rec.date)). " *
+            "Before importing into QuickBooks, confirm that no journal already exists for this date. " *
+            "If there is a QB journal already, delete that journal before importing a new one " *
+            "with updated numbers and/or accounts. " *
+            "If the numbers match, there is no need to change the QB records.", nothing))
     end
 
     # --- L3-C: closed day ---------------------------------------------------

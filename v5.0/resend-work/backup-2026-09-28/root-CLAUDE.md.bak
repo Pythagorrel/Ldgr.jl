@@ -1,0 +1,111 @@
+# ldgr — project notes for Claude
+
+ldgr is a small Julia bookkeeping tool for an urgent care clinic. Staff type each day's cash figures into a local web form. The program checks the day, then writes a Daily Journal and ledgers that can be imported into QuickBooks.
+
+This folder is a sparse checkout of `github.com/Pythagorrel/Ldgr.jl` (branch `main`) with only `v4.0/` checked out.
+
+## Work in progress
+
+The v4.0 entry form's wiring fixes and UI refresh, planned in [`v4.0/handoff/README.md`](v4.0/handoff/README.md), are **implemented and verified (2026-09-14) but not committed**. Don't run the handoff again; the handoff folder now only explains the plan and how it was checked.
+
+Also uncommitted: `server.jl`'s window launcher ("Launching the UI"), merged back in on 2026-09-14 from an older copy the owner kept at `E:\version.jl`.
+
+Also uncommitted (2026-09-15): the Review and Saved screens are removed.
+- Saving writes each day straight to the books (`POST /api/save`).
+- `Staging.jl` and the notepad endpoints are deleted.
+- The "first day on record" and "replace ledger file" tick boxes are in the dock.
+- "Edit that day" loads a saved day back (`GET /api/day`).
+
+Also uncommitted (2026-09-15): each difference has its own reason.
+- An opening that doesn't match the last close (L2-B) is explained in a reason box in Start of day. It is sent as `openingReason` and stored in a new Daily Journal column, "Opening Reason".
+- A day that doesn't balance (L2-A) is still explained in End of day, as `reason`, in the "Reason" column.
+- `Checks.unexplained` refuses a day unless each difference has its own reason.
+
+**Reverted, not lost (2026-09-15 evening):** a larger body of work (email notifications via `Notify.jl`, stale-day checks L3-E/L3-F in their old meaning, Off-day Stops L1-F/L1-G, a save lock, a tips redesign) was built, then the owner asked for the codebase to be put back to the per-reason version above. It is backed up at `E:\Ldgr-evening-backup-2026-09-15\`.
+
+- **Live again, in a new form (2026-09-16):** `Notify.jl`, `notify.example.toml` and `tests/test_notify.jl`. The instant per-save emails are gone; what replaces them is one daily report (see the 2026-09-16 bullet below). `main.jl` includes `Notify.jl`, so it is no longer an orphan.
+- **Still reverted, still backed up:** the stale-day checks L3-E/L3-F as they were then (the current L3-E, "Day after already on record", is a different check), the Off-day Stops L1-F/L1-G, the save lock and the tips redesign. Don't reintroduce those without the owner asking.
+- **Deleted (2026-09-16):** `tests/test_server.jl` and `tests/test_chain_stale.jl`. They asserted the reverted API and could never pass again. `handoff/implementation-2026-09-15.md` and `handoff/review-2026-09-15.md` are still inert leftovers; the owner was asked to delete them by hand.
+
+Also uncommitted (2026-09-15, later): Save and Next day are two actions, and the server is faster.
+- `#btn-save` "Save" writes the day (`POST /api/save`) and stays on it, re-running the check so the banner and tick boxes reflect the books.
+- `#btn-next` "Next day" asks `POST /api/next` (same body as a save; answers `{ok, saved, changed, date, next, error}`; 200 only when the date is in the books with exactly the figures and reasons on screen, else 409 with a plain sentence) and moves on only on a 200. `next` is null when the date is today.
+- `warmup()` in `server.jl` runs in `start()` before listening (skip with `LDGR_NO_WARMUP=1`): the checks, journal/ledger/report code on a scratch file (`Layout.warmup_file()`, in the OS temp folder), and one real round trip to itself on a spare loopback port so HTTP.jl's server side is compiled too. It writes nothing under `LEDGER_ROOT`. JSON responses use one container type per endpoint (`FindingJSON`, `Dict{String,Any}`) so JSON3 compiles one writer each; `day_context` reads the prior day, genesis and ledger facts once per request.
+- `sysimage/` holds a PackageCompiler build (`build_sysimage.jl`, `precompile_ldgr.jl`, output `ldgr.dll`, git-ignored, ~300 MB, 15–20 min to build). `ldgr.bat` starts the server with it when present. It compiles only the packages, so editing `.jl` files never needs a rebuild.
+- `tests/test_endpoints.jl` (99 checks) covers the endpoints, `/api/next` and the warm-up; `handoff/verify-save-next.mjs` drives the form in Chrome (130 checks); `handoff/timing-probe.jl` times the endpoints cold and warm.
+- `check_day` raises L2-B while the closing balance is still blank, so the opening box's reason can be asked for straight away.
+
+Also uncommitted (2026-09-16): four owner-requested fixes after the showcase run.
+- `Report.jl` prints amounts as `$5,000.00` (via `Checks.money`).
+- The L3-B and L3-C messages say "12 September 2026", not `2026-09-12` (`Checks.spoken_date`).
+- The "first day on record" tick box and L3-D notice are asked only for a date that is not yet in the books. `day_context` and `main.jl` split `first_day` (the fact: nothing on record before it) from `genesis` (the ask: first day and not yet recorded); ledger readiness still uses the fact.
+- New notice L3-E "Day after already on record", on the closing balance box, raised when the day after is in the books and this day is not (a gap entry), reminding staff to check the two agree. `Chain.on_record` supplies the facts.
+- Changing the date keeps the typed figures on purpose.
+- `handoff/showcase-scenarios.md` is a six-day demo script (all figures multiples of 1000) that walks every reachable warning, notice and tip; it was verified end to end against a scratch `LEDGER_ROOT`.
+
+Also uncommitted (2026-09-16, later): the change log and the daily report.
+- `Changes.jl` writes `<ROOT>/Change Log.csv`, one row per write to the books, appended from **both** front doors (`server.jl`'s `handle_save` and `main.jl`'s CLI) right beside `Report.write_report`, inside a `try/catch` so a paper trail can never fail a save. It is written whether or not email is configured. 19 columns; `what` is `saved` / `edited` / `released`; the flags are `cross day edit`, `pending day`, `now balances`, `filled a gap`. `Changes.after_save(outcome; rec, previous, before)` takes `before = (in_books, next_in_books, ledger_exists)` as they were *before* the save, because `upsert_day!` replaces a row in place and the old figures are gone afterwards.
+- `Notify.jl` sends **one** report a day at `send_at` (default 18:30, machine time), built from the change log for the window plus a live `Chain.waiting_ledgers()`. A `Timer` in `start()` ticks every 60 s; the first tick is the catch-up, which sends one email covering the whole missed stretch. The marker is `<ROOT>/Notifications/last report.txt` and advances when the message is **queued**, not when it is sent. Messages are written to `Notifications/outbox/` before any network call and moved to `Notifications/sent/` once they go.
+- **The session rule is the calendar day:** figures may be corrected freely on the date the day was first saved; an edit on a later date is reported, with before → after. **The pending-day rule** overrides it: a saved day whose ledger is held on a missing day is reported when edited, even on the same date. Also reported: differences with their reasons, a day an edit makes balance, gaps filled and the ledgers they release, and the ledgers still waiting. Never for a refused save — nothing was written.
+- Env vars: `LDGR_NOTIFY_CONFIG` (point `notify.toml` elsewhere), `LDGR_NO_DIGEST=1` (no scheduler — **every test run must set it**), `LDGR_DIGEST_NOW=1` (force a report on the first tick, for testing).
+- **The form stays silent about email.** No change to `app.js`, `index.html`, `styles.css` or `Checks.jl`, and `/api/save`'s response is unchanged.
+- SMTPClient loads lazily (`Notify._load_smtp()` on first send, with a plain sentence if the package is missing), so a machine without it still runs.
+- `_retry_pending!` now returns `released_days` as well as `released`, so a released day's recomputed figures and reasons reach the report, and the monthly ledger is rebuilt for **every** month the retry touched, not only the saved day's month.
+- `tests/test_notify.jl` (19 groups, 156 checks) covers all of it and sends nothing: it clears its own `LEDGER_ROOT`, points `LDGR_NOTIFY_CONFIG` inside it before loading `main.jl`, and captures `Notify.TRANSPORT[]`. `tests/test_server.jl` and `tests/test_chain_stale.jl` were deleted.
+
+## Where things are
+
+- `v4.0/*.jl` — the program. The "Files" table in `v4.0/README.md` says what each file does. `server.jl` is the only place the browser and the bookkeeping code meet.
+- `v4.0/public/` — the form: `index.html`, `styles.css` and `app.js`. It is plain JavaScript with no build step.
+  - `server.jl` serves this folder **by file name only**, so it cannot contain subfolders.
+  - `prototype.html` is a designer's visual reference, not part of the app.
+- `v4.0/tests/` — the test scripts and `TESTING.md`.
+
+## Running things safely
+
+- **Always set `LEDGER_ROOT` to a scratch folder** before starting the server or running any test. Without it, everything is written under `v4.0/Records/`, which holds the real books.
+- **Always set `LDGR_NO_DIGEST=1` and point `LDGR_NOTIFY_CONFIG` at a file that does not exist** for any test or scratch server. Without both, a daily report could be composed from scratch books and emailed to the owner. `tests/test_notify.jl` sets them itself; nothing else does.
+- **`tests/test_endtoend_edge.jl` deletes its `LEDGER_ROOT` folder when it starts** (`rm(Layout.ROOT; recursive=true, force=true)`). If `LEDGER_ROOT` is not set, that folder is `v4.0/Records/`.
+- **Starting the server** (from `v4.0/`):
+  1. Set `LEDGER_ROOT` to a scratch folder.
+  2. Set `LDGR_NO_BROWSER=1`. Without it, `start()` opens the form in a Chrome app window (`--app=`, no address bar or tabs) on the owner's screen. The owner wants that window in normal use, so don't remove the launcher from `server.jl`.
+  3. Run `julia --startup-file=no server.jl 8765`.
+  4. Open http://127.0.0.1:8765.
+- **Picking up changes:**
+  - Front-end files are read again on every request, so reloading the page picks up edits.
+  - Julia edits need a server restart.
+  - The server warms itself up before listening (about 9 s, or 2 s with the sysimage; `LDGR_NO_WARMUP=1` skips it), after which every endpoint answers at once. Starting with the sysimage (`julia -J sysimage/ldgr.dll ...` or `ldgr.bat`) makes both the load and the warm-up several times faster.
+- **Running the tests:** the test scripts `include("Config.jl")` and similar files relative to their own folder, but they live in `tests/`. Run them from a scratch copy of `v4.0` with `tests/*.jl` copied next to the source files. `v4.0/handoff/verification.md` has a script for this.
+- **This machine:** Windows 11 (Git Bash and PowerShell), with Node 24 and Google Chrome installed. Julia 1.9.2 is on PATH with HTTP, JSON3, DataFrames and CSV installed; the README asks for Julia 1.10+, but the server runs on 1.9.2.
+
+## Rules that must not be broken
+
+These come from `v4.0/README.md`:
+
+1. Never change a category `key` in `Config.jl`.
+2. Never build a path outside `Layout.jl`.
+3. Never calculate the closing balance for the user.
+4. Never pre-fill the opening balance either.
+5. Never let a Level 2 warning be dismissed with one click. The typed reason is required.
+6. Never edit a Daily Journal in Excel.
+7. Never change the server bind address from 127.0.0.1.
+8. Don't run two servers against the same Records folder.
+
+These come from the code comments ("Handover §4"):
+
+- The browser never decides how severe a warning is. It shows the level, code and message that the server's checks return.
+- The front end holds no category names of its own. The form is built from `/api/config`.
+
+## UI principle
+
+The form's appeal is how simple it is. The people using it are non-technical, non-accountant clinic staff. That means:
+
+- plain words
+- one obvious main action per screen
+- no extra features
+
+The look can be more refined, modern and minimal, but it stays in the existing green and cream colours (the tokens at the top of `v4.0/public/styles.css`).
+
+## Git
+
+Don't commit or push unless asked.
