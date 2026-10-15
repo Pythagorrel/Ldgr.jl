@@ -1,0 +1,54 @@
+16:47:19 [launcher] LDGR.exe started (mode window) from E:\Ldgr\vFinal (6.0)\dist\LDGR
+16:47:19 [launcher] starting Julia: E:\Ldgr\vFinal (6.0)\dist\LDGR\runtime\julia\bin\julia.exe --startup-file=no --history-file=no "--project=E:\Ldgr\vFinal (6.0)\dist\LDGR\runtime\env" -J "E:\Ldgr\vFinal (6.0)\dist\LDGR\runtime\ldgr.dll" -e "LDGR.app_main()"
+16:47:20 LDGR 6.0.0 (built 2026-10-08), Julia 1.10.12
+16:47:20   Records folder : E:\Ldgr\vFinal (6.0)\dist\LDGR\Records
+16:47:20   Email          : off (no notify.toml)
+16:47:20   Warm-up took 0.7 s
+16:47:20 [ Info: Listening on: 127.0.0.1:0, thread id: 1
+16:47:20 LDGR-READY http://127.0.0.1:54231
+16:47:21 [launcher] READY http://127.0.0.1:54231 after 1 s
+16:47:21 [launcher] WebView2 runtime 154.0.4258.62
+16:47:21 [launcher] navigation succeeded; the form is showing
+16:47:31 [launcher] closing: asking Julia to stop
+16:47:31 [launcher] Julia's standard input closed
+16:47:31   Closing...
+16:47:31 [ Info: Server on 127.0.0.1:0 closing
+16:47:31   Stopped.
+16:47:31 [launcher] Julia exited with code 0
+16:47:31 [launcher] LDGR.exe exits with code 0
+16:47:34 [launcher] LDGR.exe started (mode window) from E:\Ldgr\vFinal (6.0)\dist\LDGR
+16:47:34 [launcher] starting Julia: E:\Ldgr\vFinal (6.0)\dist\LDGR\runtime\julia\bin\julia.exe --startup-file=no --history-file=no "--project=E:\Ldgr\vFinal (6.0)\dist\LDGR\runtime\env" -J "E:\Ldgr\vFinal (6.0)\dist\LDGR\runtime\ldgr.dll" -e "LDGR.app_main()"
+16:47:34 LDGR 6.0.0 (built 2026-10-08), Julia 1.10.12
+16:47:34   Records folder : E:\Ldgr\vFinal (6.0)\dist\LDGR\Records
+16:47:34   Email          : off (no notify.toml)
+16:47:35   Warm-up took 0.8 s
+16:47:35 [ Info: Listening on: 127.0.0.1:0, thread id: 1
+16:47:35 LDGR-READY http://127.0.0.1:60710
+16:47:35 [launcher] READY http://127.0.0.1:60710 after 1 s
+16:47:35 [launcher] WebView2 runtime 154.0.4258.62
+16:47:35 [launcher] navigation succeeded; the form is showing
+16:47:38 [launcher] closing: asking Julia to stop
+16:47:38 [launcher] Julia's standard input closed
+16:47:38   Closing...
+16:47:38 [ Info: Server on 127.0.0.1:0 closing
+16:47:38   Stopped.
+16:47:38 [launcher] Julia exited with code 0
+16:47:38 [launcher] LDGR.exe exits with code 0
+16:47:59 [launcher] LDGR.exe started (mode window) from E:\Ldgr\vFinal (6.0)\dist\LDGR
+16:47:59 [launcher] starting Julia: E:\Ldgr\vFinal (6.0)\dist\LDGR\runtime\julia\bin\julia.exe --startup-file=no --history-file=no "--project=E:\Ldgr\vFinal (6.0)\dist\LDGR\runtime\env" -J "E:\Ldgr\vFinal (6.0)\dist\LDGR\runtime\ldgr.dll" -e "LDGR.app_main()"
+16:48:00 LDGR 6.0.0 (built 2026-10-08), Julia 1.10.12
+16:48:00   Records folder : E:\Ldgr\vFinal (6.0)\dist\LDGR\Records
+16:48:00   Email          : off (no notify.toml)
+16:48:01   Warm-up took 0.7 s
+16:48:01 [ Info: Listening on: 127.0.0.1:0, thread id: 1
+16:48:01 LDGR-READY http://127.0.0.1:56166
+16:48:01 [launcher] READY http://127.0.0.1:56166 after 1 s
+16:48:01 [launcher] WebView2 runtime 154.0.4258.62
+16:48:01 [launcher] navigation succeeded; the form is showing
+16:48:11 [launcher] closing: asking Julia to stop
+16:48:11 [launcher] Julia's standard input closed
+16:48:11   Closing...
+16:48:11 [ Info: Server on 127.0.0.1:0 closing
+16:48:12   Stopped.
+16:48:12 [launcher] Julia exited with code 0
+16:48:12 [launcher] LDGR.exe exits with code 0

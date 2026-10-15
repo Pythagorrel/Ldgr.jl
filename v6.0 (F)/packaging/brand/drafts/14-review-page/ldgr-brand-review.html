@@ -1,0 +1,167 @@
+<title>LDGR Brand Review</title>
+<style>
+  /* Layout: one reading column of four sign-off sections; each pairs a large view with a short check list. */
+  :root {
+    --page: #FAF9F6;
+    --card: #FFFFFF;
+    --ink: #1C2521;
+    --ink-soft: #5B6660;
+    --accent: #1F6F5C;
+    --band: #E8F3EE;
+    --line: #E3E0D8;
+    --frame: #EFEDE7;
+    --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: "Cascadia Mono", Consolas, ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #121715; --card: #1A211E; --ink: #E7ECE9; --ink-soft: #A3AEA8;
+      --accent: #6FC2A8; --band: #1E2B26; --line: #2C3632; --frame: #232C28; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #121715; --card: #1A211E; --ink: #E7ECE9; --ink-soft: #A3AEA8;
+    --accent: #6FC2A8; --band: #1E2B26; --line: #2C3632; --frame: #232C28; color-scheme: dark;
+  }
+
+  body { background: var(--page); color: var(--ink); font: 400 15px/1.55 var(--sans); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: grid; gap: 56px; }
+
+  header.top { display: grid; gap: 10px; max-width: 68ch; }
+  .eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  h1 { margin: 0; font-size: clamp(26px, 3.4vw, 34px); line-height: 1.15; font-weight: 600; text-wrap: balance; }
+  .lede { margin: 0; color: var(--ink-soft); }
+  .status { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .chip { font-size: 12.5px; padding: 3px 10px; border-radius: 999px; background: var(--band); color: var(--ink); border: 1px solid var(--line); }
+
+  section { display: grid; gap: 18px; }
+  .sec-head { display: grid; gap: 4px; max-width: 72ch; }
+  h2 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.25; }
+  .sec-head p { margin: 0; color: var(--ink-soft); }
+  .kind { font-size: 12px; color: var(--ink-soft); }
+  .kind b { color: var(--accent); font-weight: 600; }
+
+  figure { margin: 0; display: grid; gap: 8px; min-width: 0; }
+  .shot { background: var(--frame); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  .shot img { display: block; width: 100%; height: auto; border-radius: 4px; }
+  .shot.tight { justify-self: start; }
+  figcaption { font-size: 13px; color: var(--ink-soft); }
+
+  .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; align-items: start; }
+  .check { margin: 0; padding: 14px 18px 14px 34px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 6px; max-width: 80ch; }
+  .check li { padding-left: 2px; }
+  .check li::marker { color: var(--accent); }
+  .check-title { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; margin-left: -16px; list-style: none; }
+  code { font-family: var(--mono); font-size: 13px; }
+
+  /* Pixel-exact views: shown at their own pixel size and never smoothed, so what looks soft is the real edge. */
+  .px { overflow-x: auto; }
+  .px img { width: auto; max-width: none; image-rendering: pixelated; }
+  .note { font-size: 13px; color: var(--ink-soft); max-width: 80ch; margin: 0; }
+  .icon-row { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 640px) { .icon-row { grid-template-columns: 1fr; } }
+
+  footer { color: var(--ink-soft); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; max-width: 80ch; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">LDGR 6.0 · final sign-off</div>
+    <h1>The launcher, the form header and the icon, as staff will see them</h1>
+    <p class="lede">Four views to check. The form header is a capture of the real LDGR form, running from a scratch copy with the new image in place. The startup, closing and icon views are rendered stills of the finished art, at your 1536 × 864 window and 125 % Windows scaling.</p>
+    <div class="status">
+      <span class="chip">Script: Petit Formal</span>
+      <span class="chip">Page colour #FAF9F6</span>
+      <span class="chip">Not yet wired into LDGR.exe</span>
+    </div>
+  </header>
+
+  <section id="startup">
+    <div class="sec-head">
+      <h2>1 · Startup screen</h2>
+      <p>Shown from the moment LDGR is opened until the form is ready, usually about 3 seconds. A normal start shows only the banner.</p>
+      <div class="kind"><b>Rendered still</b> · 1920 × 1080, your screen at 125 %</div>
+    </div>
+    <figure>
+      <div class="shot"><img src="img/startup.png" width="1920" height="1080" alt="Startup screen: the LDGR ledger-paper banner centred on the cream page, with no text"></div>
+      <figcaption>Normal start: the banner only.</figcaption>
+    </figure>
+    <figure>
+      <div class="shot"><img src="img/startup-failure.png" width="1920" height="1080" alt="Startup screen with the could-not-start message and the log file path under the banner"></div>
+      <figcaption>Only if something goes wrong: the message appears under the banner in Segoe UI, and the banner does not move. The same place is used for "Still starting. Please wait." after 60 seconds.</figcaption>
+    </figure>
+    <ul class="check">
+      <li class="check-title">Check</li>
+      <li>The banner sits a little above centre, at 42 % of the height.</li>
+      <li>The paper reads as part of the app's cream page, with its soft card shadow.</li>
+      <li>The rounded corners look soft, not sharp.</li>
+      <li>The failure text is readable and does not crowd the banner.</li>
+    </ul>
+  </section>
+
+  <section id="closing">
+    <div class="sec-head">
+      <h2>2 · Closing screen</h2>
+      <p>Shown for a few seconds while LDGR closes and hands over the daily report.</p>
+      <div class="kind"><b>Rendered still</b> · 1920 × 1080, your screen at 125 %</div>
+    </div>
+    <figure>
+      <div class="shot"><img src="img/closing.png" width="1920" height="1080" alt="Closing screen: the word Closing… in green script, centred on the cream page"></div>
+      <figcaption>"Closing…" in Petit Formal Script, brand green, at the same height as the startup banner.</figcaption>
+    </figure>
+    <ul class="check">
+      <li class="check-title">Check</li>
+      <li>The word is easy to read at a glance.</li>
+      <li>Its size feels right for the screen.</li>
+    </ul>
+  </section>
+
+  <section id="header">
+    <div class="sec-head">
+      <h2>3 · Form header</h2>
+      <p>The strip replaces the green square, "LDGR" and "Urgent Care" at the top left of the form. Nothing else on the form changes.</p>
+      <div class="kind"><b>Capture of the real form</b> · scratch copy, 1536 × 864 window at 125 %</div>
+    </div>
+    <figure>
+      <div class="shot"><img src="img/form.png" width="1920" height="1080" alt="The LDGR entry form with the new header strip at the top left"></div>
+      <figcaption>The whole window as staff will see it on opening.</figcaption>
+    </figure>
+    <figure>
+      <div class="shot px"><img src="img/header-compare.png" width="1000" height="224" alt="The header strip in the form before and after: full strength on the left, 94.5 percent opacity on the right, magnified twice with hard pixels"></div>
+      <figcaption>Your screen's own pixels from the form, magnified 2× with hard pixel edges. The strip is now at 94.5 % opacity, so it sits slightly softer on the page. The form also now picks the exact 1.25× file for your screen, instead of shrinking the 2× one.</figcaption>
+    </figure>
+    <ul class="check">
+      <li class="check-title">Check</li>
+      <li>"LDGR" leads, and "Urgent Care" reads as the quieter caption.</li>
+      <li>At 94.5 %, the contrast with the page feels right.</li>
+      <li>The join is seamless, and the lines run straight across it.</li>
+    </ul>
+  </section>
+
+  <section id="icon">
+    <div class="sec-head">
+      <h2>4 · App icon</h2>
+      <p>The icon on LDGR.exe, the taskbar and the desktop shortcut. You already approved this one; it is included for the full set.</p>
+      <div class="kind"><b>Rendered stills</b> · the real icon files, shown at their own pixel sizes</div>
+    </div>
+    <p class="note">The previous version of this page stretched these pictures to fill the column, which made them look blurry. They are now shown pixel for pixel, magnified with hard edges. The slight softness at the letter edges is the icon's own anti-aliasing, the same as every Windows icon has.</p>
+    <figure>
+      <div class="shot px"><img src="img/icon-magnified.png" width="984" height="702" alt="The small icon sizes 16, 20, 24, 32 and 48 pixels, magnified six times with hard pixels, on light and dark"></div>
+      <figcaption>The small sizes Windows uses on the taskbar, title bar and in Explorer, magnified 6×. Each size is its own drawing.</figcaption>
+    </figure>
+    <div class="icon-row">
+      <figure>
+        <div class="shot px"><img src="img/icon-256.png" width="256" height="256" alt="The LDGR icon at 256 pixels: a green script L between ledger rules on off-white paper"></div>
+        <figcaption>256 px, actual size: the desktop shortcut at large icons.</figcaption>
+      </figure>
+      <figure>
+        <div class="shot px"><img src="img/icon-taskbar-2x.png" width="1240" height="200" alt="The icon at 24 and 32 pixels on a light and a dark Windows taskbar, magnified twice"></div>
+        <figcaption>On the Windows 11 taskbar, light and dark, magnified 2×. Scroll sideways if it does not fit.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <footer>
+    The files are in <code>vFinal (6.0)\packaging\brand\</code>, with the exact sizes and positions in its <code>README.md</code>. Once you sign off, the next step is to wire them into the launcher, the form and the exe icon, then rebuild and re-check the packaged app.
+  </footer>
+</div>

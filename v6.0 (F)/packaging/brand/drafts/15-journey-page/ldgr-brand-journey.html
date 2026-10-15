@@ -1,0 +1,300 @@
+<title>LDGR Brand Journey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Petit+Formal+Script&family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+  /* Layout: a single reading column that runs down a ruled "ledger" margin. Each step is one entry: what was
+     tried, what Jorrel said, what was decided, then the pictures. */
+  :root {
+    --page: #FAF9F6;
+    --card: #FFFFFF;
+    --ink: #1C2521;
+    --ink-soft: #5B6660;
+    --accent: #1F6F5C;
+    --band: #E8F3EE;
+    --line: #E3E0D8;
+    --rule: rgba(31, 111, 92, .18);
+    --script: "Petit Formal Script", "Segoe Script", cursive;
+    --sans: "Source Sans 3", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #121715; --card: #1A211E; --ink: #E7ECE9; --ink-soft: #A3AEA8;
+      --accent: #74C7AC; --band: #1D2A25; --line: #2C3632; --rule: rgba(116, 199, 172, .22); color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #121715; --card: #1A211E; --ink: #E7ECE9; --ink-soft: #A3AEA8;
+    --accent: #74C7AC; --band: #1D2A25; --line: #2C3632; --rule: rgba(116, 199, 172, .22); color-scheme: dark;
+  }
+
+  body { background: var(--page); color: var(--ink); font: 400 17px/1.6 var(--sans); }
+  .wrap { max-width: 980px; margin: 0 auto; padding-inline: 20px; padding-block: 48px 80px; }
+
+  /* Opening */
+  .hero { display: grid; gap: 14px; padding-bottom: 36px; border-bottom: 1px solid var(--line); }
+  .hero .from { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  .hero h1 { margin: 0; font-family: var(--script); font-weight: 400; font-size: clamp(40px, 7vw, 68px); line-height: 1.15; color: var(--accent); }
+  .hero p { margin: 0; max-width: 62ch; color: var(--ink-soft); }
+  .tally { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 6px; font-size: 15px; }
+  .tally b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .tally span { color: var(--ink-soft); }
+  .endpoint { margin-top: 10px; display: grid; gap: 8px; }
+  .endpoint img { border-radius: 12px; border: 1px solid var(--line); background: var(--card); }
+
+  /* The ledger: entries down a ruled margin */
+  .ledger { position: relative; margin-top: 44px; display: grid; gap: 56px; }
+  .ledger::before { content: ""; position: absolute; top: 0; bottom: 0; left: 23px; width: 4px;
+    border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); }
+  .entry { position: relative; display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 0 22px; }
+  .no { position: relative; z-index: 1; width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--page); border: 1px solid var(--line); font-family: var(--script); font-size: 22px; color: var(--accent); }
+  .body { display: grid; gap: 14px; min-width: 0; padding-top: 6px; }
+  .when { font-size: 13px; color: var(--ink-soft); letter-spacing: .04em; text-transform: uppercase; }
+  h2 { margin: 0; font-size: 24px; line-height: 1.25; font-weight: 600; text-wrap: balance; }
+  .body p { margin: 0; max-width: 66ch; }
+  .said { margin: 0; padding: 12px 18px; border-left: 3px solid var(--accent); background: var(--band); border-radius: 0 10px 10px 0; max-width: 70ch; }
+  .said q { quotes: "\201C" "\201D"; font-style: italic; }
+  .said cite { display: block; margin-top: 4px; font-size: 14px; font-style: normal; color: var(--ink-soft); }
+  .decided { display: inline-flex; gap: 8px; align-items: baseline; font-size: 15px; color: var(--ink); max-width: 70ch; }
+  .decided::before { content: "Decided"; flex: none; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600;
+    color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 9px; }
+
+  figure { margin: 0; display: grid; gap: 6px; min-width: 0; }
+  figure img { display: block; max-width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: #fff; }
+  figure.small img { width: auto; }
+  figcaption { font-size: 14px; color: var(--ink-soft); }
+  .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; align-items: start; }
+
+  .turn { margin: 0; font-family: var(--script); font-size: 26px; color: var(--accent); line-height: 1.3; }
+
+  footer { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: 15px; display: grid; gap: 6px; max-width: 72ch; }
+
+  @media (max-width: 560px) {
+    .ledger::before { left: 17px; }
+    .entry { grid-template-columns: 38px minmax(0, 1fr); gap: 0 14px; }
+    .no { width: 38px; height: 38px; font-size: 18px; }
+    h2 { font-size: 21px; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="from">LDGR 6.0 · 8–9 October 2026</div>
+    <h1>From a ledger idea to the logo on the taskbar</h1>
+    <p>Hannah's idea was the word LDGR written into an accounting ledger, as if it were an entry. This page shows every round it took to get from that idea to what now opens on the clinic's computer. Each step lists what we tried, what Jorrel said about it, and what we kept. The pictures are the actual drafts.</p>
+    <div class="tally">
+      <span><b>33</b> fonts on the first specimen</span>
+      <span><b>15</b> cursive scripts sourced</span>
+      <span><b>6</b> first-round boards</span>
+      <span><b>3</b> colour schemes for the paper</span>
+      <span><b>5</b> revisions of the header strip alone</span>
+      <span><b>431</b> draft files kept</span>
+    </div>
+    <figure class="endpoint">
+      <img src="img/10-startup-final.png" width="1920" height="1080" alt="The final LDGR start banner: the word LDGR in green script cascading down ruled off-white ledger paper">
+      <figcaption>Where it ended: the start banner, "LDGR" in Petit Formal Script cascading down a patch of ledger paper.</figcaption>
+    </figure>
+  </header>
+
+  <div class="ledger">
+
+    <section class="entry">
+      <div class="no">1</div>
+      <div class="body">
+        <div class="when">The brief</div>
+        <h2>Write LDGR into a ledger</h2>
+        <p>There were four pieces to design, all in one display font that the form itself would never use:</p>
+        <ul style="margin:0;padding-left:20px;max-width:66ch">
+          <li>the full logo;</li>
+          <li>a start screen showing it with "powered by SolRegia";</li>
+          <li>a closing screen;</li>
+          <li>the small image at the top left of the form.</li>
+        </ul>
+        <p>The letters were to fall between the ledger lines, as an entry would.</p>
+      </div>
+    </section>
+
+    <section class="entry">
+      <div class="no">2</div>
+      <div class="body">
+        <div class="when">Round 0 · fonts</div>
+        <h2>33 fonts on a strip of ledger paper</h2>
+        <p>Every candidate font wrote "LDGR" on the same green ruled strip with a red margin, all at the same height, so they could be compared fairly. Only fonts we could legally use in a logo made the shortlist.</p>
+        <figure>
+          <img src="img/01-specimen-full.png" width="2800" height="10040" alt="The full specimen board: LDGR in 33 fonts, each on its own green ruled ledger strip with a red margin, labelled with the font name and licence">
+          <figcaption>The whole specimen board, all 33 fonts, each labelled with its name and licence. Rows 1–9 are open-licence; the rest come with Windows or Office.</figcaption>
+        </figure>
+        <p class="decided">Take two open-licence serifs into the first round: Source Serif 4 and Piazzolla.</p>
+      </div>
+    </section>
+
+    <section class="entry">
+      <div class="no">3</div>
+      <div class="body">
+        <div class="when">Round 1 · concepts</div>
+        <h2>Three ways to put a word in a ledger</h2>
+        <blockquote class="said"><q>The ledger should scale with the size of the LDGR text to actually act as a backdrop and the dimensions of the letters should fit aesthetically into the lines. Think the ratio of letters in the Pacioli font selectively highlighted by the lines in the ledger background.</q><cite>Jorrel, mid-round</cite></blockquote>
+        <p>Luca Pacioli, the father of double-entry bookkeeping, also drew Roman capitals on a strict grid. So the ruling was set from the letters' own measurements, with rules landing exactly on the baseline, the cap height and the waist of the R. Each idea was drawn in both fonts: the word as one entry, the letters cascading down the rows, and each letter in its own square cell.</p>
+        <figure>
+          <img src="img/02-round1.png" width="2550" height="1460" alt="Six round-one concepts: the entry, the cascade and the Pacioli plate, each in two serif fonts">
+          <figcaption>The entry, the cascade and the Pacioli plate, each in Source Serif 4 and in Piazzolla.</figcaption>
+        </figure>
+        <p class="decided">Source Serif 4, and drop the cascade. But the middle rule read as a line crossed through the word, which in a ledger means a voided entry, and the rules were far too heavy.</p>
+      </div>
+    </section>
+
+    <section class="entry">
+      <div class="no">4</div>
+      <div class="body">
+        <div class="when">Round 2 · hairlines</div>
+        <h2>Lighter rules, and nothing crossing the letters</h2>
+        <p>The rules became hairlines. The middle rule was cut away around the letters, and three ways of handling the ruling were drawn.</p>
+        <figure>
+          <img src="img/03-round2.png" width="2120" height="1960" alt="Three hairline variants of the LDGR wordmark on white and on cream">
+          <figcaption>V1 "between the lines", V2 "highlighted cells", V3 "the total", each on white and on the form's cream.</figcaption>
+        </figure>
+        <p class="decided">V2, with a green segment above and below each letter.</p>
+      </div>
+    </section>
+
+    <section class="entry">
+      <div class="no">5</div>
+      <div class="body">
+        <div class="when">First production set</div>
+        <h2>A start screen, a closing screen and header options</h2>
+        <div class="pair">
+          <figure><img src="img/04-serif-startup.png" width="1920" height="1080" alt="Serif start screen with powered by SolRegia and a Starting LDGR status line"><figcaption>The serif start screen, with "powered by SolRegia".</figcaption></figure>
+          <figure><img src="img/04-serif-headers.png" width="808" height="736" alt="Today's header compared with three serif header options"><figcaption>Header options against the form's old header.</figcaption></figure>
+        </div>
+        <blockquote class="said"><q>When I said selectively I just meant that based on the typographical proportions of the Pacioli font, the horizontal lines of the ledger would only match up with some letters' dimensions.</q><cite>Jorrel</cite></blockquote>
+        <figure><img src="img/05-plain-vs-v2.png" width="1600" height="550" alt="The V2 wordmark with green highlight segments beside the plain ledger-line version"><figcaption>So the green segments went. The lines simply meet some letters (the R's waist, the G's bar) and miss others.</figcaption></figure>
+        <p class="decided">Plain ledger lines. For the header, a mini wordmark with "Urgent Care" beside it, and the ledger lines must still run through the word.</p>
+      </div>
+    </section>
+
+    <section class="entry">
+      <div class="no">6</div>
+      <div class="body">
+        <div class="when">The turning point</div>
+        <h2>"A bit too plain and vanilla"</h2>
+        <figure class="small"><img src="img/06-serif-wordmarks.png" width="780" height="748" alt="Three serif header wordmarks with ledger lines in the real form header"><figcaption>Three serif header wordmarks with ledger lines, shown in the real form header.</figcaption></figure>
+        <blockquote class="said"><q>I like W1 but don't you find the font a bit too plain and vanilla? I'd like some cursive. It fits the analogue backdrop better. Also it should have the 'book' colour … the backdrop should be slightly textured to give it that book feel and the font could be smaller, the lines should be uniform in length, and it can have the vertical lines that make it resemble an actual ledger book.</q><cite>Jorrel, with a photo of a real two-page ledger</cite></blockquote>
+        <p class="turn">Everything serif was set aside.</p>
+      </div>
+    </section>
+
+    <section class="entry">
+      <div class="no">7</div>
+      <div class="body">
+        <div class="when">Paper</div>
+        <h2>A patch of real ledger paper</h2>
+        <p>The paper took the ivory colour of the reference photo and a generated grain. It got rules of equal length, a heading band, a margin double rule and money columns.</p>
+        <div class="pair">
+          <figure><img src="img/07-paper-logo.png" width="600" height="300" alt="Ivory ledger paper patch with money columns and a placeholder word"><figcaption>The first paper patch, with a placeholder word for scale.</figcaption></figure>
+          <figure><img src="img/07-paper-header.png" width="1920" height="175" alt="The ivory paper patch in the form header"><figcaption>The same patch at header size.</figcaption></figure>
+        </div>
+        <blockquote class="said"><q>Cut the vertical height so it matches the LDGR more closely and there only really need to be the two sets of vertical lines, i.e. the ends should be symmetrical. That way the letters can cascade diagonally downwards instead of being plainly horizontal.</q><cite>Jorrel</cite></blockquote>
+        <p>The cascade from round 1 came back. Then two more notes followed:</p>
+        <blockquote class="said"><q>The colour of the paper background should mesh well with the background of the actual LDGR application.</q><cite>Jorrel</cite></blockquote>
+        <blockquote class="said"><q>Perhaps keeping the paper texture but have the background and letter colours match the colour scheme. Green and white letters on off-white paper.</q><cite>Jorrel</cite></blockquote>
+      </div>
+    </section>
+
+    <section class="entry">
+      <div class="no">8</div>
+      <div class="body">
+        <div class="when">Cursive</div>
+        <h2>Fifteen scripts, eight on the shortlist</h2>
+        <p>The design-reference library had no script fonts, so 15 open-licence pen scripts were found and licence-checked, and the ones with readable capitals were kept.</p>
+        <figure class="small"><img src="img/08-cursive.png" width="1100" height="1200" alt="LDGR, Ldgr and Closing written in fifteen script fonts"><figcaption>"LDGR · Ldgr · Closing" in all fifteen.</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="entry">
+      <div class="no">9</div>
+      <div class="body">
+        <div class="when">Cascade and colour</div>
+        <h2>Every script cascading down the paper</h2>
+        <div class="pair">
+          <figure><img src="img/09-cascade.png" width="1100" height="1580" alt="Eight script fonts cascading LDGR on off-white ruled paper with green letters"><figcaption>The eight shortlisted scripts, green on off-white.</figcaption></figure>
+          <figure><img src="img/09-colourways.png" width="1150" height="900" alt="Green-on-off-white and white-on-green versions in two fonts"><figcaption>Green on off-white against white on green, at logo size and at header size.</figcaption></figure>
+        </div>
+        <p class="decided">Petit Formal Script, green on off-white, rounded corners. No "powered by SolRegia" on the start screen. The icon is just the L. "Urgent Care" goes white on green beside the LDGR patch.</p>
+      </div>
+    </section>
+
+    <section class="entry">
+      <div class="no">10</div>
+      <div class="body">
+        <div class="when">Start and close</div>
+        <h2>The start and closing screens</h2>
+        <div class="pair">
+          <figure><img src="img/10-startup-with-text.png" width="1920" height="1080" alt="Start screen with the banner and a Starting LDGR line"><figcaption>First version, with "Starting LDGR…" under the banner.</figcaption></figure>
+          <figure><img src="img/10-closing.png" width="1920" height="1080" alt="Closing screen: Closing… in green script"><figcaption>The closing screen.</figcaption></figure>
+        </div>
+        <blockquote class="said"><q>Starting LDGR actually isn't necessary anymore. I think that the banner with the name of the program popping up after they double click should have them understand the program is loading up, lol.</q><cite>Jorrel</cite></blockquote>
+        <p class="decided">The banner only. A sentence appears under it only when a start is slow or fails.</p>
+      </div>
+    </section>
+
+    <section class="entry">
+      <div class="no">11</div>
+      <div class="body">
+        <div class="when">The header pair</div>
+        <h2>LDGR and Urgent Care, side by side</h2>
+        <div class="pair">
+          <figure class="small"><img src="img/11-pair-unbalanced.png" width="654" height="147" alt="LDGR patch beside a stronger Urgent Care patch"><figcaption>First pair: "Urgent Care" outweighed the program name.</figcaption></figure>
+          <figure class="small"><img src="img/11-pair-balanced.png" width="654" height="147" alt="The two patches with LDGR strengthened"><figcaption>Weights evened out.</figcaption></figure>
+        </div>
+        <blockquote class="said"><q>Urgent Care should be written in a smaller size for sure … don't want it to detract from the program name itself. Also try making it so there's no space separating the two, i.e. the position of the vertical lines should essentially overlap.</q><cite>Jorrel</cite></blockquote>
+      </div>
+    </section>
+
+    <section class="entry">
+      <div class="no">12</div>
+      <div class="body">
+        <div class="when">Five more passes</div>
+        <h2>One strip, measured to the letter</h2>
+        <div class="pair">
+          <figure class="small"><img src="img/12-strip-joined.png" width="552" height="147" alt="The two patches joined into one strip sharing a double rule"><figcaption>Joined into one strip that shares a double rule: green on the white side, white on the green side.</figcaption></figure>
+          <figure class="small"><img src="img/12-strip-final.png" width="489" height="147" alt="The final header strip"><figcaption>The final strip.</figcaption></figure>
+        </div>
+        <blockquote class="said"><q>Top of the capital U should be maybe under the top 2/7ths of the D in LDGR and the bottoms of the Care should end about 4/9ths of the way down from the top of the R.</q><cite>Jorrel</cite></blockquote>
+        <figure><img src="img/12-strip-measured.png" width="972" height="294" alt="The header strip enlarged with guide lines at two sevenths of the D and four ninths of the R"><figcaption>Measured exactly, with the guide lines drawn across both halves. Then "Urgent Care" grew 2.75 %.</figcaption></figure>
+        <figure class="small"><img src="img/12-opacity.png" width="1000" height="224" alt="The header strip at full strength beside 94.5 percent opacity"><figcaption>Contrast against the page was too strong. 85 % opacity was tried, and 94.5 % was kept.</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="entry">
+      <div class="no">13</div>
+      <div class="body">
+        <div class="when">The icon</div>
+        <h2>Just the L</h2>
+        <p>The L sits between the two double rules on the same paper, with rounded corners to match Windows 11. Each of the ten sizes is drawn separately, and below 48 px the texture is dropped and the L made heavier, so it still reads at 16 px.</p>
+        <figure class="small"><img src="img/13-icon-sizes.png" width="988" height="608" alt="The L icon at every size from 16 to 256 pixels on light and dark"><figcaption>Every size from 16 to 256 px, on a light and a dark taskbar.</figcaption></figure>
+        <blockquote class="said"><q>Taskbar icon looks great.</q><cite>Jorrel</cite></blockquote>
+      </div>
+    </section>
+
+    <section class="entry">
+      <div class="no">14</div>
+      <div class="body">
+        <div class="when">In the real app</div>
+        <h2>Wired into LDGR.exe</h2>
+        <p>These are screenshots of the real program, run from a scratch copy. The start banner now floats on its own in the middle of the desktop until the form is ready, like a classic splash screen.</p>
+        <figure><img src="img/14-form-real.png" width="1920" height="1020" alt="The LDGR form with the new header strip at the top left"><figcaption>The form, with the header strip at the top left.</figcaption></figure>
+        <div class="pair">
+          <figure><img src="img/14-closing-real.png" width="1920" height="1020" alt="LDGR closing screen in the real window"><figcaption>Closing.</figcaption></figure>
+          <figure><img src="img/14-could-not-start.png" width="1920" height="1020" alt="The banner with the could-not-start message under it"><figcaption>What staff see if it ever fails to start (a deliberately broken test copy).</figcaption></figure>
+        </div>
+        <figure class="small"><img src="img/14-taskbar.png" width="1080" height="180" alt="The LDGR L icon on the Windows taskbar"><figcaption>On the taskbar.</figcaption></figure>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <div>Drawn in VectorCraft; references and font searches through Uizze. Every font in the final art is open-licence (SIL OFL), and the app ships no font files, because the script is baked into the images.</div>
+    <div>All 431 drafts are kept in <code>vFinal (6.0)\packaging\brand\drafts\</code>, in numbered folders, in the order things happened.</div>
+  </footer>
+</div>

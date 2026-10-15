@@ -1,0 +1,255 @@
+Microsoft Windows [Version 10.0.26200.9278]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\angel\Documents\GitHub\Dev\v4.0>set LEDGER_ROOT=C:\temp\ldgr_test_edge
+
+C:\Users\angel\Documents\GitHub\Dev\v4.0>julia test_checks_basic.jl
+
+--- correct day
+  (clean)
+
+--- negative field
+  [L1-A] STOP: "Doctor's Fees" cannot be negative. If money moved the other way, that is a different kind of transaction and needs its own field — please raise it rather than entering a minus figure.
+
+--- overspend
+  [L1-B] STOP: More cash has been paid out than was ever in the drawer. Expenses, deposit and Mr. Boyle come to $222,400.00, but only $99,670.00 was available (opening $1,270.00 plus cash sales $98,400.00).
+
+--- blank closing
+  [L1-C] STOP: "Closing Balance" has not been filled in. Blank is not the same as zero here — it means the drawer was never counted. Enter 0 only if it really was empty.
+
+--- expense 22000 not 22400 (short 400)
+  [L2-A] EXPLAIN: The day does not balance. The drawer holds $400.00 less than the day's figures account for — the figures predict $2,670.00 and $2,270.00 was counted.
+
+--- closing 2720 not 2270 (surplus 450, /9)
+  [L2-A] EXPLAIN: The day does not balance. The drawer holds $450.00 more than the day's figures account for — the figures predict $2,270.00 and $2,720.00 was counted.
+  [L4-1] HINT: $450.00 divides evenly by 9, which usually means two digits are swapped or a decimal point is in the wrong place.
+
+--- overnight gap 450
+  [L2-B] EXPLAIN: The opening balance does not match the last working day. It is $450.00 more than the $1,270.00 that day closed with. The day's own arithmetic still uses the figure that was counted this morning.
+  [L4-1] HINT: $450.00 divides evenly by 9, which usually means two digits are swapped or a decimal point is in the wrong place.
+
+--- expense omitted (0 not 22400)
+  [L2-A] EXPLAIN: The day does not balance. The drawer holds $22,400.00 less than the day's figures account for — the figures predict $24,670.00 and $2,270.00 was counted.
+
+--- no prior day
+  [L3-A] NOTICE: The day before this one has not been entered yet, so this day's ledger cannot be finished. The day itself is saved. The ledger will be produced automatically once the missing day is entered.
+
+--- genesis
+  [L3-D] NOTICE: This is the first day on record, so there is nothing to check the opening balance against. It will be accepted as the starting point for every day that follows.
+
+--- closed day
+  [L3-C] NOTICE: 2026-08-20 is recorded as closed. No ledger will be generated for it, and the next working day will open with $1,270.00, carried straight through.
+
+C:\Users\angel\Documents\GitHub\Dev\v4.0>julia test_checks_hints.jl
+
+--- diff equals an entered figure
+  [L2-A] The day does not balance. The drawer holds $400.00 less than the day's figures account for — the figures predict $2,270.00 and $1,870.00 was counted.
+  [L4-2] The difference is exactly "Taxi Fare" ($400.00). That figure may have been entered twice, or missed out somewhere.
+
+--- decimal slip on deposit
+  [L2-A] The day does not balance. The drawer holds $67,500.00 less than the day's figures account for — the figures predict $69,770.00 and $2,270.00 was counted.
+  [L4-1] $67,500.00 divides evenly by 9, which usually means two digits are swapped or a decimal point is in the wrong place.
+  [L4-3] The difference is exactly nine times "Deposits" ($7,500.00). That figure probably has its decimal point in thewrong place.
+
+--- bad format: extra decimal places
+  [L1-D] "Doctor's Fees" has more than two decimal places. Cash cannot be smaller than a cent.
+
+C:\Users\angel\Documents\GitHub\Dev\v4.0>julia test_endtoend.jl
+
+======================================================================
+  LDGR v4.0 END-TO-END
+  ROOT: C:\temp\ldgr_test_edge
+======================================================================
+
+LEVEL 1 — Stop
+  PASS  L1-A negative figure  [blocked: correct reason]
+  PASS  L1-B outflow exceeds cash available  [blocked: correct reason]
+  PASS  L1-C closing balance blank  [blocked: correct reason]
+  PASS  L1-E future date  [blocked: correct reason]
+
+LEVEL 3 — Genesis
+  PASS  genesis refused without authorisation  [blocked: correct reason]
+  PASS  genesis accepted with --first-day
+  PASS  genesis day balances
+
+Clean chain
+  PASS  day 2 recorded, ledger written
+  PASS  day 2 no day variance
+  PASS  day 2 no overnight variance
+
+LEVEL 2 — Explain
+  PASS  difference with no reason is refused  [blocked: correct reason]
+  PASS  shortage recorded with a reason
+  PASS  reason stored on the day
+  PASS  overnight variance computed
+
+LEVEL 3 — Ledger gate (missing day)
+  PASS  day after a gap is HELD
+  PASS  the day after THAT posts normally (blast radius is 1)
+  PASS  and so does the next
+  PASS  exactly one ledger pending
+  PASS  filling the gap releases the held day
+  PASS  no ledgers pending afterwards
+
+LEVEL 3 — Closed days
+  PASS  closed day generates no ledger
+  PASS  closed day has no variance
+  PASS  closed day not counted as pending
+  PASS  balance carries across a long weekend
+
+LEVEL 3 — Re-import confirmation
+┌ Warning: A daily ledger already exists for 2026-06-11. It has NOT been overwritten.
+└ @ Main C:\Users\angel\Documents\GitHub\Dev\v4.0\main.jl:255
+  PASS  re-entering a day refuses to overwrite its ledger
+  PASS  --force regenerates it after confirmation
+
+Month boundary
+  PASS  1 Jul finds 30 Jun across the folder boundary
+  PASS  and computes no false overnight variance
+
+Ledger content
+  PASS  variance posts to the over/short account
+  PASS  a shortage DEBITS over/short
+  PASS  ledger still balances (debits == credits)
+  PASS  undeposited == cash to be deposited (POS no longer subtracted)
+
+Month-level check
+  PASS  month movement reconciles to the balance span
+
+Report
+  PASS  report file written
+  PASS  report lists the month position
+  PASS  report lists held ledgers section
+
+======================================================================
+  PASSED 36   FAILED 0
+======================================================================
+
+C:\Users\angel\Documents\GitHub\Dev\v4.0>julia test_checks_edge.jl
+
+--- bad format: journal key 3dp
+  [L1-D] STOP: "Doctor's Fees" has more than two decimal places. Cash cannot be smaller than a cent.
+
+--- bad format: cash-book key 3dp
+  [L1-D] STOP: "Closing Balance" has more than two decimal places. Cash cannot be smaller than a cent.
+
+--- bad format: NaN in journal key
+  [L1-D] STOP: "Taxi Fare" is not a usable number.
+
+--- Stop + no-prior-day notice
+  [L1-A] STOP: "Doctor's Fees" cannot be negative. If money moved the other way, that is a different kind of transaction and needs its own field — please raise it rather than entering a minus figure.
+
+--- Stop + genesis notice
+  [L1-A] STOP: "Doctor's Fees" cannot be negative. If money moved the other way, that is a different kind of transaction and needs its own field — please raise it rather than entering a minus figure.
+
+--- two stops: negative + future date
+  [L1-A] STOP: "Doctor's Fees" cannot be negative. If money moved the other way, that is a different kind of transaction and needs its own field — please raise it rather than entering a minus figure.
+  [L1-E] STOP: 2027-01-01 is in the future. Nobody has counted that day's drawer yet.
+
+--- two hints on one difference
+  [L2-A] EXPLAIN: The day does not balance. The drawer holds $450.00 more than the day's figures account for — the figures predict $1,820.00 and $2,270.00 was counted.
+  [L4-1] HINT: $450.00 divides evenly by 9, which usually means two digits are swapped or a decimal point is in the wrong place.
+  [L4-2] HINT: The difference is exactly "Taxi Fare" ($450.00). That figure may have been entered twice, or missed out somewhere.
+
+--- imbalance + no prior day
+  [L2-A] EXPLAIN: The day does not balance. The drawer holds $450.00 more than the day's figures account for — the figures predict $2,270.00 and $2,720.00 was counted.
+  [L3-A] NOTICE: The day before this one has not been entered yet, so this day's ledger cannot be finished. The day itself is saved. The ledger will be produced automatically once the missing day is entered.
+  [L4-1] HINT: $450.00 divides evenly by 9, which usually means two digits are swapped or a decimal point is in the wrong place.
+
+--- imbalance + genesis
+  [L2-A] EXPLAIN: The day does not balance. The drawer holds $450.00 more than the day's figures account for — the figures predict $2,270.00 and $2,720.00 was counted.
+  [L3-D] NOTICE: This is the first day on record, so there is nothing to check the opening balance against. It will be accepted as the starting point for every day that follows.
+  [L4-1] HINT: $450.00 divides evenly by 9, which usually means two digits are swapped or a decimal point is in the wrong place.
+
+--- imbalance + ledger already exists
+  [L2-A] EXPLAIN: The day does not balance. The drawer holds $450.00 more than the day's figures account for — the figures predict $2,270.00 and $2,720.00 was counted.
+  [L3-B] NOTICE: A ledger has already been generated for 2026-08-20. If it was imported into QuickBooks, importing the replacement would count this day twice. Confirm it was never imported, or that the old import has been deleted.
+  [L4-1] HINT: $450.00 divides evenly by 9, which usually means two digits are swapped or a decimal point is in the wrong place.
+
+--- closed day + ledger already exists
+  [L3-B] NOTICE: A ledger has already been generated for 2026-08-20. If it was imported into QuickBooks, importing the replacement would count this day twice. Confirm it was never imported, or that the old import has been deleted.
+  [L3-C] NOTICE: 2026-08-20 is recorded as closed. No ledger will be generated for it, and the next working day will open with $1,270.00, carried straight through.
+
+--- genesis + ledger already exists
+  [L3-D] NOTICE: This is the first day on record, so there is nothing to check the opening balance against. It will be accepted as the starting point for every day that follows.
+  [L3-B] NOTICE: A ledger has already been generated for 2026-08-20. If it was imported into QuickBooks, importing the replacement would count this day twice. Confirm it was never imported, or that the old import has been deleted.
+
+--- closed day, no prior, not genesis
+  [L3-C] NOTICE: 2026-08-20 is recorded as closed. No ledger will be generated for it, and the next working day will open with the previous working day's balance, carried straight through.
+
+--- all-zero day
+  (clean)
+
+--- very large figures
+  (clean)
+
+--- closed day right after genesis
+  [L3-D] NOTICE: This is the first day on record, so there is nothing to check the opening balance against. It will be accepted as the starting point for every day that follows.
+  [L3-C] NOTICE: 2026-08-20 is recorded as closed. No ledger will be generated for it, and the next working day will open with the previous working day's balance, carried straight through.
+
+C:\Users\angel\Documents\GitHub\Dev\v4.0>julia test_endtoend_edge.jl
+
+======================================================================
+  LDGR v4.0 END-TO-END — EDGE CASES
+  ROOT: C:\temp\ldgr_test_edge
+======================================================================
+
+Genesis followed immediately by a gap
+  PASS  genesis accepted
+  PASS  day right after a genesis-adjacent gap is HELD
+
+Closed day filling the gap (also: closed day right after genesis-adjacent span)
+  PASS  closed day accepted with no ledger
+  PASS  held day is NOT auto-released without a reason
+  PASS  held day still shows as pending
+  PASS  day releases once a reason is supplied
+  PASS  overnight variance now correctly recorded as 450.00
+
+Multiple closed days spanning a month boundary
+  PASS  first closed day (month-end) generates no ledger
+  PASS  second closed day (month-start) generates no ledger
+
+Closed day immediately before a gap
+  PASS  day after a gap that starts right after a closed day is HELD
+  PASS  filling the gap releases the held day
+  PASS  balance carried through the closed days is still correct
+
+Leap year (2024) boundary
+  PASS  Feb 29 posts normally with a real prior day
+  PASS  Mar 1 finds Feb 29 across the leap-year month boundary
+  PASS  no false overnight variance across the leap day
+
+Re-entering the same day twice with --force
+  PASS  first --force overwrites
+  PASS  second consecutive --force also overwrites (idempotent, no crash)
+
+Re-entering a day as a different status (no defined expected behaviour — inspect manually)
+  trading -> closed on re-entry: daily_ledger=not applicable (closed)
+  closed -> trading on re-entry: daily_ledger=written
+
+Release reason gate: recomputed overnight variance with no reason
+  PASS  day after the gap is HELD
+  PASS  gap-filling day itself posts normally
+  PASS  held day is NOT auto-released without a reason
+  PASS  held day still shows as pending
+  PASS  day releases once a reason is supplied
+  PASS  overnight variance now correctly recorded as 450.00
+  PASS  nothing left pending after the reason is given
+
+Cascading release across a multi-day gap, filled forward in order
+  PASS  day after a 3-day gap is HELD
+  PASS  first day filled (03-04) posts normally, not held
+  PASS  03-07 still waiting — 03-06 still missing
+  PASS  second day filled (03-05) posts normally, not held
+  PASS  03-07 still waiting — 03-06 still missing
+  PASS  third day filled (03-06, the true gap) posts normally
+  PASS  03-07 finally releases once the real gap closes
+  PASS  nothing left pending in March 2024
+
+======================================================================
+  PASSED 32   FAILED 0
+======================================================================
+
+C:\Users\angel\Documents\GitHub\Dev\v4.0>rd /s /q C:\temp\ldgr_test_edge
+
+C:\Users\angel\Documents\GitHub\Dev\v4.0>
